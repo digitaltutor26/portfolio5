@@ -22,6 +22,7 @@
           <a href="#submissions">제출물</a>
           <a href="#review">검토</a>
           <a href="#reports">리포트</a>
+          <a href="#feedback">사용자 피드백</a>
         </nav>
         <div class="sidebar-meta">
           <span class="status-dot"></span>
@@ -196,6 +197,57 @@
                     <tbody id="resultRows"></tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel feedback-panel" id="feedback">
+            <div class="panel-header">
+              <div>
+                <h2>사용자 테스트 피드백</h2>
+                <p>테스트 후 핵심 질문에만 답변</p>
+              </div>
+              <button class="ghost-button compact" id="exportFeedback" type="button">JSON 내보내기</button>
+            </div>
+            <div class="feedback-grid">
+              <form class="feedback-form" id="feedbackForm">
+                <label>
+                  1. 처음 화면에서 무엇을 해야 할지 바로 알 수 있었나요?
+                  <select name="startClarity">
+                    <option value="예">예</option>
+                    <option value="보통">보통</option>
+                    <option value="아니오">아니오</option>
+                  </select>
+                </label>
+                <label>
+                  2. AI 점수와 근거를 신뢰할 수 있었나요?
+                  <select name="trust">
+                    <option value="예">예</option>
+                    <option value="보통">보통</option>
+                    <option value="아니오">아니오</option>
+                  </select>
+                </label>
+                <label>
+                  3. 실제 수행평가 업무에 바로 도움이 될 것 같나요?
+                  <select name="usefulness">
+                    <option value="예">예</option>
+                    <option value="보통">보통</option>
+                    <option value="아니오">아니오</option>
+                  </select>
+                </label>
+                <label>
+                  4. 가장 헷갈리거나 막힌 부분은 무엇인가요?
+                  <textarea name="confusingPoint" placeholder="예: 승인과 저장 차이가 헷갈림"></textarea>
+                </label>
+                <label>
+                  5. 다음 버전에 꼭 필요하다고 느낀 기능은 무엇인가요?
+                  <textarea name="neededFeature" placeholder="예: 엑셀 양식 가져오기, HWP/PDF 업로드"></textarea>
+                </label>
+                <button class="primary-button" type="submit">피드백 저장</button>
+              </form>
+              <div>
+                <h3>저장된 답변</h3>
+                <div id="feedbackList" class="feedback-list"></div>
               </div>
             </div>
           </div>

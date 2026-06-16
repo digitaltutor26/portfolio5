@@ -476,11 +476,66 @@ textarea {
   grid-column: 1 / -1;
 }
 
+.feedback-panel {
+  grid-column: 1 / -1;
+}
+
 .report-grid {
   display: grid;
   grid-template-columns: minmax(320px, 0.8fr) minmax(420px, 1.2fr);
   gap: 16px;
   padding: 16px;
+}
+
+.feedback-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(360px, 1.1fr);
+  gap: 16px;
+  padding: 16px;
+}
+
+.feedback-form {
+  display: grid;
+  gap: 12px;
+}
+
+.feedback-list {
+  display: grid;
+  gap: 10px;
+}
+
+.feedback-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 12px;
+}
+
+.feedback-item header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.feedback-item dl {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.feedback-item dt {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.feedback-item dd {
+  margin: 0;
 }
 
 .distribution {
@@ -569,6 +624,7 @@ th {
 
   .board,
   .report-grid,
+  .feedback-grid,
   .review-layout {
     grid-template-columns: 1fr;
   }

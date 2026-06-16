@@ -74,6 +74,7 @@ const defaultState = {
     },
   ],
   currentIndex: 0,
+  testFeedback: [],
 };
 
 let state = loadState();
@@ -101,6 +102,8 @@ const els = {
   metricAverage: document.querySelector("#metricAverage"),
   distribution: document.querySelector("#distribution"),
   resultRows: document.querySelector("#resultRows"),
+  feedbackForm: document.querySelector("#feedbackForm"),
+  feedbackList: document.querySelector("#feedbackList"),
   toast: document.querySelector("#toast"),
 };
 
@@ -113,6 +116,8 @@ document.querySelector("#nextStudent").addEventListener("click", () => moveStude
 document.querySelector("#saveReview").addEventListener("click", saveReview);
 document.querySelector("#approveReview").addEventListener("click", approveReview);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
+document.querySelector("#exportFeedback").addEventListener("click", exportFeedback);
+els.feedbackForm.addEventListener("submit", saveTestFeedback);
 
 [
   els.assessmentTitle,
@@ -144,7 +149,10 @@ function loadState() {
   if (!raw) return structuredClone(defaultState);
 
   try {
-    return JSON.parse(raw);
+    return {
+      ...structuredClone(defaultState),
+      ...JSON.parse(raw),
+    };
   } catch {
     return structuredClone(defaultState);
   }
@@ -193,7 +201,9 @@ function addSubmission() {
 }
 
 function resetDemo() {
+  const existingFeedback = state.testFeedback || [];
   state = structuredClone(defaultState);
+  state.testFeedback = existingFeedback;
   saveState();
   render();
   showToast("샘플 데이터가 복원되었습니다.");
@@ -351,6 +361,44 @@ function exportCsv() {
   showToast("CSV 파일을 생성했습니다.");
 }
 
+function saveTestFeedback(event) {
+  event.preventDefault();
+  const formData = new FormData(els.feedbackForm);
+  const feedback = {
+    id: `feedback-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    startClarity: formData.get("startClarity"),
+    trust: formData.get("trust"),
+    usefulness: formData.get("usefulness"),
+    confusingPoint: String(formData.get("confusingPoint") || "").trim(),
+    neededFeature: String(formData.get("neededFeature") || "").trim(),
+  };
+
+  state.testFeedback = [feedback, ...(state.testFeedback || [])];
+  saveState();
+  els.feedbackForm.reset();
+  renderFeedback();
+  showToast("사용자 테스트 피드백을 저장했습니다.");
+}
+
+function exportFeedback() {
+  const payload = {
+    assessment: state.assessment.title,
+    exportedAt: new Date().toISOString(),
+    feedback: state.testFeedback || [],
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "auto1-user-test-feedback.json";
+  link.click();
+  URL.revokeObjectURL(url);
+  showToast("피드백 JSON 파일을 생성했습니다.");
+}
+
 function render() {
   renderAssessment();
   renderRubric();
@@ -358,6 +406,7 @@ function render() {
   renderReview();
   renderMetrics();
   renderReport();
+  renderFeedback();
 }
 
 function renderAssessment() {
@@ -527,6 +576,43 @@ function renderReport() {
   });
 }
 
+function renderFeedback() {
+  const feedbackItems = state.testFeedback || [];
+  els.feedbackList.innerHTML = "";
+
+  if (feedbackItems.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "feedback-item";
+    empty.textContent = "아직 저장된 사용자 테스트 피드백이 없습니다.";
+    els.feedbackList.appendChild(empty);
+    return;
+  }
+
+  feedbackItems.forEach((item, index) => {
+    const div = document.createElement("div");
+    div.className = "feedback-item";
+    div.innerHTML = `
+      <header>
+        <span>응답 ${feedbackItems.length - index}</span>
+        <time>${formatDateTime(item.createdAt)}</time>
+      </header>
+      <dl>
+        <dt>시작 이해</dt>
+        <dd>${escapeHtml(item.startClarity)}</dd>
+        <dt>AI 신뢰</dt>
+        <dd>${escapeHtml(item.trust)}</dd>
+        <dt>업무 도움</dt>
+        <dd>${escapeHtml(item.usefulness)}</dd>
+        <dt>막힌 부분</dt>
+        <dd>${escapeHtml(item.confusingPoint || "없음")}</dd>
+        <dt>필요 기능</dt>
+        <dd>${escapeHtml(item.neededFeature || "없음")}</dd>
+      </dl>
+    `;
+    els.feedbackList.appendChild(div);
+  });
+}
+
 function statusLabel(status) {
   return {
     pending: "대기",
@@ -541,6 +627,15 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function formatDateTime(value) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function showToast(message) {
