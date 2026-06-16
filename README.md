@@ -1,50 +1,61 @@
 # portfolio5
 
-Operation improvement workspace for AI-assisted automation.
+AI 기반 업무 자동화와 운영 개선을 실험하는 저장소입니다.
 
 ## Auto1
 
-Current product direction:
+현재 이 폴더의 핵심 목표는 **학생 수행평가 자동 평가 도구**를 만드는 것입니다.
 
-This folder is currently focused on building a tool for automatically evaluating
-student performance assessments while keeping the teacher as the final reviewer.
+이 도구는 AI가 점수와 피드백을 제안하되, 최종 판단은 교사가 검토하고 승인하는 구조를 전제로 합니다. 마케팅용 소개 페이지가 아니라 실제 교사가 반복적으로 사용할 수 있는 운영형 도구를 목표로 합니다.
 
-The intended product is an operational teacher-facing tool, not a marketing
-site. The core workflow is:
+## 핵심 흐름
 
-1. Create an assessment.
-2. Define or import a rubric.
-3. Upload or paste student submissions.
-4. Run AI-assisted evaluation.
-5. Review evidence, score, and feedback.
-6. Approve or override results.
-7. Export class records and feedback.
+1. 평가 과제를 생성합니다.
+2. 루브릭을 작성하거나 가져옵니다.
+3. 학생 제출물을 업로드하거나 붙여넣습니다.
+4. AI 보조 평가를 실행합니다.
+5. 점수, 근거, 피드백을 교사가 검토합니다.
+6. 교사가 승인하거나 점수와 피드백을 수정합니다.
+7. 학급 결과와 피드백을 CSV 등으로 내보냅니다.
 
-See `DESIGN.md` for the product, UX, and interface direction.
+제품 방향, UX 원칙, 화면 구조는 `DESIGN.md`에 정리되어 있습니다.
 
-## Prototype
+## 프로토타입 실행
 
-Open `app/index.html` in a browser to try the first static prototype.
+첫 번째 정적 프로토타입은 브라우저에서 바로 열 수 있습니다.
 
-The prototype includes:
+```text
+app/index.html
+```
 
-- assessment setup
-- rubric editing
-- sample student submissions
-- local AI-style scoring simulation
-- teacher review and approval
-- class summary and CSV export
+현재 프로토타입에 포함된 기능:
 
-## Existing Automation Harness
+- 평가 설정
+- 루브릭 편집
+- 샘플 학생 제출물 관리
+- 로컬 AI-style 자동 평가 시뮬레이션
+- 기준별 점수와 근거 표시
+- 교사 최종 점수, 피드백, 메모 저장
+- 승인 처리
+- 학급 요약 리포트
+- CSV 내보내기
 
-`codex_harness/` contains a Codex CLI multi-agent harness that can initialize
-project agent files, run role-based workflows, produce reports, and operate in
-non-interactive mode.
+## 자동화 하네스
 
-The long-term reference project is `digitaltutor26/portfolio5`.
+`codex_harness/`에는 Codex CLI 기반 멀티 에이전트 자동화 하네스가 들어 있습니다.
 
-## Uploaded Reference
+하네스가 지원하는 기능:
 
-`회사 출근 전 확인사항_YYproject - Claude.pdf` is present as a reference document
-for a larger future automation project. Its content still needs extraction or a
-manual summary before it becomes implementation requirements.
+- 대상 프로젝트 초기화
+- 역할 기반 워크플로 실행
+- 비대화형 자동 실행 정책
+- 리뷰 결과에 따른 자동 수정 루프
+- 실행 리포트 생성
+
+장기 기준 GitHub 저장소는 `digitaltutor26/portfolio5`입니다.
+
+## 참고 문서
+
+`회사 출근 전 확인사항_YYproject - Claude.pdf` 파일은 더 큰 자동화 프로젝트를 위한 참고 문서입니다.
+
+현재 환경에서는 PDF 본문 추출 도구가 없어 내용을 요구사항으로 확정하지 않았습니다. 추후 본문을 추출하거나 수동 요약한 뒤 자동화 업무 목록과 워크플로 설계에 반영할 예정입니다.
