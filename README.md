@@ -1,8 +1,10 @@
-# Auto1
+# portfolio5
 
-AI-assisted automation workspace.
+Operation improvement workspace for AI-assisted automation.
 
-## Current Product Direction
+## Auto1
+
+Current product direction:
 
 This folder is currently focused on building a tool for automatically evaluating
 student performance assessments while keeping the teacher as the final reviewer.
