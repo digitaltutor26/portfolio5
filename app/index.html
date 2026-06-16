@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auto1 수행평가 평가</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="주요 메뉴">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">A1</div>
+          <div>
+            <strong>Auto1</strong>
+            <span>수행평가 평가</span>
+          </div>
+        </div>
+        <nav class="nav">
+          <a href="#assessments" class="active">평가</a>
+          <a href="#rubric">루브릭</a>
+          <a href="#submissions">제출물</a>
+          <a href="#review">검토</a>
+          <a href="#reports">리포트</a>
+        </nav>
+        <div class="sidebar-meta">
+          <span class="status-dot"></span>
+          교사 승인 필요
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">2학년 국어 · 프로젝트형 수행평가</p>
+            <h1>환경 주제 주장 글쓰기 평가</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="ghost-button" id="resetDemo" type="button">샘플 복원</button>
+            <button class="primary-button" id="runEvaluation" type="button">자동 평가 실행</button>
+          </div>
+        </header>
+
+        <section class="metric-strip" aria-label="평가 현황">
+          <div class="metric">
+            <span>제출</span>
+            <strong id="metricSubmissions">0</strong>
+          </div>
+          <div class="metric">
+            <span>검토 대기</span>
+            <strong id="metricPending">0</strong>
+          </div>
+          <div class="metric">
+            <span>승인</span>
+            <strong id="metricApproved">0</strong>
+          </div>
+          <div class="metric">
+            <span>평균</span>
+            <strong id="metricAverage">-</strong>
+          </div>
+        </section>
+
+        <section class="board">
+          <div class="panel assessment-panel" id="assessments">
+            <div class="panel-header">
+              <div>
+                <h2>평가 설정</h2>
+                <p>과제 정보와 평가 정책</p>
+              </div>
+              <span class="pill">초안</span>
+            </div>
+            <div class="form-grid">
+              <label>
+                과제명
+                <input id="assessmentTitle" value="환경 주제 주장 글쓰기" />
+              </label>
+              <label>
+                학년/과목
+                <input id="assessmentSubject" value="2학년 국어" />
+              </label>
+              <label>
+                만점
+                <input id="assessmentMax" type="number" min="1" value="20" />
+              </label>
+              <label>
+                검토 정책
+                <select id="reviewPolicy">
+                  <option>모든 결과 교사 승인</option>
+                  <option>낮은 신뢰도만 검토</option>
+                  <option>점수 변경 항목만 검토</option>
+                </select>
+              </label>
+            </div>
+            <label class="full-field">
+              과제 안내
+              <textarea id="assessmentPrompt">환경 문제에 대한 자신의 주장을 세우고, 근거를 들어 설득력 있는 글을 작성한다.</textarea>
+            </label>
+          </div>
+
+          <div class="panel rubric-panel" id="rubric">
+            <div class="panel-header">
+              <div>
+                <h2>루브릭</h2>
+                <p>기준별 배점과 핵심 단서</p>
+              </div>
+              <button class="icon-button" id="addCriterion" type="button" aria-label="기준 추가" title="기준 추가">+</button>
+            </div>
+            <div id="rubricList" class="rubric-list"></div>
+          </div>
+
+          <div class="panel submissions-panel" id="submissions">
+            <div class="panel-header">
+              <div>
+                <h2>제출물</h2>
+                <p>학생 답안을 붙여넣거나 샘플을 편집</p>
+              </div>
+              <button class="ghost-button compact" id="addSubmission" type="button">학생 추가</button>
+            </div>
+            <div id="submissionList" class="submission-list"></div>
+          </div>
+
+          <div class="panel review-panel" id="review">
+            <div class="panel-header">
+              <div>
+                <h2>검토 작업공간</h2>
+                <p>점수, 근거, 피드백 승인</p>
+              </div>
+              <div class="review-actions">
+                <button class="ghost-button compact" id="prevStudent" type="button">이전</button>
+                <button class="ghost-button compact" id="nextStudent" type="button">다음</button>
+              </div>
+            </div>
+            <div class="review-layout">
+              <div class="student-pane">
+                <div class="student-header">
+                  <div>
+                    <span id="currentStudentId">-</span>
+                    <h3 id="currentStudentName">학생 선택</h3>
+                  </div>
+                  <span class="state-chip" id="currentState">대기</span>
+                </div>
+                <textarea id="currentSubmissionText" aria-label="학생 제출물"></textarea>
+              </div>
+              <div class="score-pane">
+                <div class="score-box">
+                  <span>AI 제안 점수</span>
+                  <strong id="currentScore">-</strong>
+                  <small id="currentConfidence">신뢰도 -</small>
+                </div>
+                <div class="criterion-scores" id="criterionScores"></div>
+                <label>
+                  교사 최종 점수
+                  <input id="teacherScore" type="number" min="0" />
+                </label>
+                <label>
+                  피드백
+                  <textarea id="feedbackText"></textarea>
+                </label>
+                <label>
+                  교사 메모
+                  <textarea id="teacherNote" placeholder="수정 사유 또는 보류 사유"></textarea>
+                </label>
+                <div class="button-row">
+                  <button class="ghost-button" id="saveReview" type="button">저장</button>
+                  <button class="primary-button" id="approveReview" type="button">승인</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel report-panel" id="reports">
+            <div class="panel-header">
+              <div>
+                <h2>리포트</h2>
+                <p>학급 결과와 내보내기</p>
+              </div>
+              <button class="primary-button compact" id="exportCsv" type="button">CSV 내보내기</button>
+            </div>
+            <div class="report-grid">
+              <div>
+                <h3>점수 분포</h3>
+                <div id="distribution" class="distribution"></div>
+              </div>
+              <div>
+                <h3>학생별 결과</h3>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>학생</th>
+                        <th>상태</th>
+                        <th>AI</th>
+                        <th>최종</th>
+                      </tr>
+                    </thead>
+                    <tbody id="resultRows"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>

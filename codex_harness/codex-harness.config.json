@@ -1,0 +1,26 @@
+{
+  "repository": "digitaltutor26/portfolio5",
+  "codexCommand": "codex",
+  "rolesDir": ".agents/roles",
+  "workflowsDir": ".agents/workflows",
+  "reportsDir": "reports",
+  "maxFixLoops": 1,
+  "policy": {
+    "onAmbiguity": "choose-safe-default",
+    "onMissingTests": "document-gap",
+    "onReviewerChanges": "auto-fix-once",
+    "onDependencyNeeded": "block",
+    "onDestructiveAction": "block"
+  },
+  "commands": {
+    "test": "bash codex_harness/scripts/test.sh",
+    "review": "bash codex_harness/scripts/review.sh"
+  },
+  "sandbox": {
+    "architect": "read-only",
+    "implementer": "workspace-write",
+    "tester": "workspace-write",
+    "reviewer": "read-only",
+    "debugger": "workspace-write"
+  }
+}

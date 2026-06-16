@@ -1,0 +1,8 @@
+.DS_Store
+.omx/
+reports/
+codex_harness/reports/
+node_modules/
+dist/
+build/
+*.log
