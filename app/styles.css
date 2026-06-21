@@ -372,16 +372,75 @@ textarea {
 
 .submission-title {
   display: flex;
-  align-items: center;
+  align-items: start;
   justify-content: space-between;
   gap: 8px;
 }
 
-.submission-title button {
-  border: 0;
-  background: transparent;
-  color: var(--accent);
+.submission-id-name {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px;
+  gap: 6px;
+  flex: 1;
+}
+
+.input-status {
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
   font-weight: 800;
+}
+
+.input-status.filled {
+  background: #e7f4ea;
+  color: var(--ok);
+}
+
+.input-status.empty {
+  background: #fdf0e8;
+  color: var(--warn);
+}
+
+.submission-item textarea {
+  min-height: 110px;
+}
+
+.file-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.file-upload-label {
+  position: relative;
+  overflow: hidden;
+}
+
+.file-upload-label input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.file-status.success {
+  color: var(--ok);
+}
+
+.file-status.error {
+  color: var(--danger);
+}
+
+.file-status.busy {
+  color: var(--warn);
 }
 
 .review-layout {
@@ -419,8 +478,28 @@ textarea {
   font-size: 20px;
 }
 
-#currentSubmissionText {
+.readout-hint {
+  margin: -4px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.readout-hint a {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.submission-readout {
   min-height: 610px;
+  max-height: 610px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 9px 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .score-pane {

@@ -17,11 +17,11 @@
           </div>
         </div>
         <nav class="nav">
-          <a href="#assessments" class="active">평가</a>
-          <a href="#rubric">루브릭</a>
-          <a href="#submissions">제출물</a>
-          <a href="#review">검토</a>
-          <a href="#reports">리포트</a>
+          <a href="#assessments" class="active">1. 평가 설정</a>
+          <a href="#rubric">2. 루브릭</a>
+          <a href="#submissions">3. 학생 제출물 입력</a>
+          <a href="#review">4. AI 평가 검토</a>
+          <a href="#reports">5. 리포트</a>
           <a href="#feedback">사용자 피드백</a>
         </nav>
         <div class="sidebar-meta">
@@ -44,7 +44,7 @@
 
         <section class="metric-strip" aria-label="평가 현황">
           <div class="metric">
-            <span>제출</span>
+            <span>입력 완료</span>
             <strong id="metricSubmissions">0</strong>
           </div>
           <div class="metric">
@@ -112,8 +112,8 @@
           <div class="panel submissions-panel" id="submissions">
             <div class="panel-header">
               <div>
-                <h2>제출물</h2>
-                <p>학생 답안을 붙여넣거나 샘플을 편집</p>
+                <h2>학생 제출물 입력</h2>
+                <p>학생이 작성한 수행평가 답안을 직접 입력하거나, .txt/.pdf 파일을 업로드하세요 (손글씨 스캔본 인식은 아직 지원하지 않습니다)</p>
               </div>
               <button class="ghost-button compact" id="addSubmission" type="button">학생 추가</button>
             </div>
@@ -123,8 +123,8 @@
           <div class="panel review-panel" id="review">
             <div class="panel-header">
               <div>
-                <h2>검토 작업공간</h2>
-                <p>점수, 근거, 피드백 승인</p>
+                <h2>AI 평가 검토</h2>
+                <p>입력된 제출물을 기준으로 산출된 점수와 근거를 확인하고 승인</p>
               </div>
               <div class="review-actions">
                 <button class="ghost-button compact" id="prevStudent" type="button">이전</button>
@@ -140,7 +140,11 @@
                   </div>
                   <span class="state-chip" id="currentState">대기</span>
                 </div>
-                <textarea id="currentSubmissionText" aria-label="학생 제출물"></textarea>
+                <p class="readout-hint">
+                  제출 내용은 읽기 전용입니다. 수정이 필요하면
+                  <a href="#submissions">학생 제출물 입력</a>에서 변경하세요.
+                </p>
+                <div id="currentSubmissionText" class="submission-readout" aria-label="학생 제출물 (읽기 전용)"></div>
               </div>
               <div class="score-pane">
                 <div class="score-box">

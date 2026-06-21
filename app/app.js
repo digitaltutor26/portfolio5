@@ -126,24 +126,6 @@ els.feedbackForm.addEventListener("submit", saveTestFeedback);
   els.assessmentPrompt,
 ].forEach((el) => el.addEventListener("input", updateAssessment));
 
-els.currentSubmissionText.addEventListener("input", () => {
-  const current = getCurrentSubmission();
-  current.text = els.currentSubmissionText.value;
-  current.status = "pending";
-  current.aiScore = null;
-  current.teacherScore = null;
-  current.confidence = null;
-  current.scores = {};
-  saveState();
-  els.currentState.textContent = statusLabel(current.status);
-  els.currentState.className = "state-chip pending";
-  els.currentScore.textContent = "-";
-  els.currentConfidence.textContent = "신뢰도 -";
-  els.teacherScore.value = "";
-  renderMetrics();
-  renderReport();
-});
-
 function loadState() {
   const raw = window.localStorage.getItem("auto1-state");
   if (!raw) return structuredClone(defaultState);
@@ -319,7 +301,6 @@ function saveReview() {
   current.teacherScore = Number(els.teacherScore.value || 0);
   current.feedback = els.feedbackText.value;
   current.note = els.teacherNote.value;
-  current.text = els.currentSubmissionText.value;
   if (current.status === "approved") current.status = "review";
   saveState();
   render();
@@ -453,28 +434,37 @@ function updateCriterion(event) {
 function renderSubmissions() {
   els.submissionList.innerHTML = "";
   state.submissions.forEach((submission, index) => {
+    const hasText = submission.text.trim().length > 0;
     const item = document.createElement("div");
     item.className = "submission-item";
     item.innerHTML = `
       <div class="submission-title">
-        <strong>${escapeHtml(submission.name)}</strong>
-        <button type="button" data-select="${index}">검토</button>
+        <div class="submission-id-name">
+          <input value="${escapeHtml(submission.name)}" data-index="${index}" data-field="name" aria-label="이름" />
+          <input value="${escapeHtml(submission.id)}" data-index="${index}" data-field="id" aria-label="학생 ID" />
+        </div>
+        <span class="input-status ${hasText ? "filled" : "empty"}">${hasText ? "입력 완료" : "입력 필요"}</span>
       </div>
-      <label>학생 ID
-        <input value="${escapeHtml(submission.id)}" data-index="${index}" data-field="id" />
-      </label>
-      <label>이름
-        <input value="${escapeHtml(submission.name)}" data-index="${index}" data-field="name" />
-      </label>
+      <textarea data-index="${index}" data-field="text" aria-label="제출 내용" placeholder="학생이 작성한 수행평가 답안을 붙여넣거나 입력하세요">${escapeHtml(submission.text)}</textarea>
+      <div class="file-upload-row">
+        <label class="ghost-button compact file-upload-label">
+          파일로 불러오기
+          <input type="file" accept=".txt,.pdf" data-index="${index}" class="file-input" />
+        </label>
+        <span class="file-status" aria-live="polite"></span>
+      </div>
+      <button type="button" data-select="${index}" class="ghost-button compact">검토로 이동 →</button>
     `;
     item.querySelector("[data-select]").addEventListener("click", () => {
       state.currentIndex = index;
       saveState();
       render();
     });
-    item.querySelectorAll("input").forEach((input) => {
+    item.querySelectorAll("input, textarea").forEach((input) => {
+      if (input.type === "file") return;
       input.addEventListener("input", updateSubmissionMeta);
     });
+    item.querySelector(".file-input").addEventListener("change", handleFileUpload);
     els.submissionList.appendChild(item);
   });
 }
@@ -482,10 +472,119 @@ function renderSubmissions() {
 function updateSubmissionMeta(event) {
   const index = Number(event.target.dataset.index);
   const field = event.target.dataset.field;
-  state.submissions[index][field] = event.target.value;
+  const submission = state.submissions[index];
+  submission[field] = event.target.value;
+
+  if (field === "text") {
+    resetEvaluation(submission);
+    updateInputStatusBadge(event.target.closest(".submission-item"), submission.text);
+  }
+
   saveState();
   renderReview();
+  renderMetrics();
   renderReport();
+}
+
+function resetEvaluation(submission) {
+  submission.status = "pending";
+  submission.aiScore = null;
+  submission.teacherScore = null;
+  submission.confidence = null;
+  submission.scores = {};
+}
+
+function updateInputStatusBadge(item, text) {
+  const statusEl = item?.querySelector(".input-status");
+  if (!statusEl) return;
+  const hasText = text.trim().length > 0;
+  statusEl.textContent = hasText ? "입력 완료" : "입력 필요";
+  statusEl.className = `input-status ${hasText ? "filled" : "empty"}`;
+}
+
+const PDFJS_VERSION = "5.4.149";
+const PDFJS_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.mjs`;
+const PDFJS_WORKER_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.mjs`;
+
+let pdfjsLibPromise = null;
+
+function loadPdfJs() {
+  if (!pdfjsLibPromise) {
+    pdfjsLibPromise = import(PDFJS_URL).then((lib) => {
+      lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+      return lib;
+    });
+  }
+  return pdfjsLibPromise;
+}
+
+async function extractPdfText(file) {
+  const pdfjsLib = await loadPdfJs();
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const pageTexts = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    pageTexts.push(content.items.map((textItem) => textItem.str).join(" "));
+  }
+  return pageTexts.join("\n").trim();
+}
+
+async function handleFileUpload(event) {
+  const fileInput = event.target;
+  const index = Number(fileInput.dataset.index);
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  const item = fileInput.closest(".submission-item");
+  const statusEl = item?.querySelector(".file-status");
+  const setStatus = (message, tone) => {
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.className = `file-status ${tone}`;
+  };
+
+  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  const isText = file.type.startsWith("text/") || file.name.toLowerCase().endsWith(".txt");
+
+  if (!isPdf && !isText) {
+    setStatus("지원하지 않는 파일 형식입니다. .txt 또는 .pdf 파일만 가능합니다.", "error");
+    fileInput.value = "";
+    return;
+  }
+
+  setStatus(`"${file.name}" 처리 중...`, "busy");
+
+  try {
+    const text = isPdf ? await extractPdfText(file) : await file.text();
+
+    if (!text.trim()) {
+      setStatus(
+        `"${file.name}"에서 텍스트를 찾지 못했습니다. 스캔본/손글씨 문서는 아직 지원하지 않습니다.`,
+        "error",
+      );
+      return;
+    }
+
+    const submission = state.submissions[index];
+    submission.text = text;
+    resetEvaluation(submission);
+
+    const textarea = item?.querySelector('textarea[data-field="text"]');
+    if (textarea) textarea.value = text;
+    updateInputStatusBadge(item, text);
+
+    saveState();
+    renderReview();
+    renderMetrics();
+    renderReport();
+    setStatus(`"${file.name}"에서 텍스트를 불러왔습니다.`, "success");
+  } catch (error) {
+    setStatus(`파일을 읽는 중 오류가 발생했습니다: ${error.message}`, "error");
+  } finally {
+    fileInput.value = "";
+  }
 }
 
 function renderReview() {
@@ -494,7 +593,7 @@ function renderReview() {
 
   els.currentStudentId.textContent = current.id;
   els.currentStudentName.textContent = current.name;
-  els.currentSubmissionText.value = current.text;
+  els.currentSubmissionText.textContent = current.text || "아직 입력된 제출물이 없습니다.";
   els.currentState.textContent = statusLabel(current.status);
   els.currentState.className = `state-chip ${current.status === "approved" ? "approved" : current.status === "review" ? "review" : "pending"}`;
   els.currentScore.textContent = current.aiScore === null ? "-" : `${current.aiScore}/${state.assessment.maxScore}`;
@@ -522,6 +621,7 @@ function renderReview() {
 
 function renderMetrics() {
   const total = state.submissions.length;
+  const filled = state.submissions.filter((item) => item.text.trim().length > 0).length;
   const approved = state.submissions.filter((item) => item.status === "approved").length;
   const pending = state.submissions.filter((item) => item.status !== "approved").length;
   const scored = state.submissions.filter((item) => item.teacherScore !== null);
@@ -529,7 +629,7 @@ function renderMetrics() {
     ? (scored.reduce((sum, item) => sum + Number(item.teacherScore), 0) / scored.length).toFixed(1)
     : "-";
 
-  els.metricSubmissions.textContent = total;
+  els.metricSubmissions.textContent = `${filled}/${total}`;
   els.metricPending.textContent = pending;
   els.metricApproved.textContent = approved;
   els.metricAverage.textContent = average;
