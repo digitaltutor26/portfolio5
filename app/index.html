@@ -2,6 +2,10 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Auto1 수행평가 평가</title>
     <link rel="stylesheet" href="./styles.css" />
@@ -113,7 +117,7 @@
             <div class="panel-header">
               <div>
                 <h2>학생 제출물 입력</h2>
-                <p>학생이 작성한 수행평가 답안을 직접 입력하거나, .txt/.pdf 파일을 업로드하세요 (손글씨 스캔본 인식은 아직 지원하지 않습니다)</p>
+                <p>학생이 작성한 수행평가 답안을 직접 입력하거나, .txt/.pdf 파일을 업로드하세요 (PDF는 타이핑된 텍스트만 인식하며, 손글씨/스캔본 인식은 아직 지원하지 않습니다)</p>
               </div>
               <button class="ghost-button compact" id="addSubmission" type="button">학생 추가</button>
             </div>

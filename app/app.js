@@ -79,6 +79,13 @@ const defaultState = {
 
 let state = loadState();
 
+const FILE_LIMITS = {
+  textBytes: 256 * 1024,
+  pdfBytes: 5 * 1024 * 1024,
+  pdfPages: 25,
+  extractedChars: 100_000,
+};
+
 const els = {
   assessmentTitle: document.querySelector("#assessmentTitle"),
   assessmentSubject: document.querySelector("#assessmentSubject"),
@@ -141,7 +148,16 @@ function loadState() {
 }
 
 function saveState() {
-  window.localStorage.setItem("auto1-state", JSON.stringify(state));
+  try {
+    window.localStorage.setItem("auto1-state", JSON.stringify(state));
+  } catch (error) {
+    if (error.name === "QuotaExceededError") {
+      showToast("저장 공간이 부족합니다. 긴 제출물을 줄이거나 일부 데이터를 정리하세요.");
+      return false;
+    }
+    throw error;
+  }
+  return true;
 }
 
 function updateAssessment() {
@@ -205,15 +221,32 @@ function moveStudent(direction) {
 function runEvaluation() {
   updateAssessment();
   state.submissions = state.submissions.map((submission) => evaluateSubmission(submission));
+  const skipped = state.submissions.filter((submission) => submission.status === "pending").length;
   state.currentIndex = state.submissions.findIndex((item) => item.status !== "approved");
   if (state.currentIndex < 0) state.currentIndex = 0;
   saveState();
   render();
-  showToast("자동 평가가 완료되었습니다. 교사 검토가 필요합니다.");
+  showToast(
+    skipped
+      ? `자동 평가가 완료되었습니다. 입력이 없는 ${skipped}명은 평가하지 않았습니다.`
+      : "자동 평가가 완료되었습니다. 교사 검토가 필요합니다.",
+  );
 }
 
 function evaluateSubmission(submission) {
-  const text = submission.text || "";
+  const text = (submission.text || "").trim();
+  if (!text) {
+    return {
+      ...submission,
+      status: "pending",
+      scores: {},
+      aiScore: null,
+      teacherScore: null,
+      confidence: null,
+      feedback: "",
+    };
+  }
+
   const words = tokenize(text);
   const scores = {};
   let total = 0;
@@ -473,11 +506,12 @@ function updateSubmissionMeta(event) {
   const index = Number(event.target.dataset.index);
   const field = event.target.dataset.field;
   const submission = state.submissions[index];
-  submission[field] = event.target.value;
 
   if (field === "text") {
-    resetEvaluation(submission);
+    setSubmissionText(submission, event.target.value);
     updateInputStatusBadge(event.target.closest(".submission-item"), submission.text);
+  } else {
+    submission[field] = event.target.value;
   }
 
   saveState();
@@ -492,6 +526,13 @@ function resetEvaluation(submission) {
   submission.teacherScore = null;
   submission.confidence = null;
   submission.scores = {};
+  submission.feedback = "";
+  submission.note = "";
+}
+
+function setSubmissionText(submission, text) {
+  submission.text = truncateText(text);
+  resetEvaluation(submission);
 }
 
 function updateInputStatusBadge(item, text) {
@@ -502,9 +543,16 @@ function updateInputStatusBadge(item, text) {
   statusEl.className = `input-status ${hasText ? "filled" : "empty"}`;
 }
 
-const PDFJS_VERSION = "5.4.149";
-const PDFJS_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.mjs`;
-const PDFJS_WORKER_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.mjs`;
+function validateFileSize(file, isPdf) {
+  const limit = isPdf ? FILE_LIMITS.pdfBytes : FILE_LIMITS.textBytes;
+  if (file.size > limit) {
+    throw new Error(`파일 크기는 최대 ${formatBytes(limit)}까지만 처리할 수 있습니다.`);
+  }
+}
+
+const APP_SCRIPT_URL = document.currentScript?.src ?? "./app.js";
+const PDFJS_URL = new URL("./vendor/pdfjs/pdf.min.mjs", APP_SCRIPT_URL).href;
+const PDFJS_WORKER_URL = new URL("./vendor/pdfjs/pdf.worker.min.mjs", APP_SCRIPT_URL).href;
 
 let pdfjsLibPromise = null;
 
@@ -522,13 +570,34 @@ async function extractPdfText(file) {
   const pdfjsLib = await loadPdfJs();
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const pageCount = Math.min(pdf.numPages, FILE_LIMITS.pdfPages);
   const pageTexts = [];
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
     pageTexts.push(content.items.map((textItem) => textItem.str).join(" "));
   }
-  return pageTexts.join("\n").trim();
+  const text = pageTexts.join("\n").trim();
+  return pdf.numPages > pageCount
+    ? `${text}\n\n[참고: 전체 ${pdf.numPages}쪽 중 처음 ${pageCount}쪽만 추출했습니다.]`
+    : text;
+}
+
+function truncateText(text) {
+  return text.length > FILE_LIMITS.extractedChars
+    ? text.slice(0, FILE_LIMITS.extractedChars)
+    : text;
+}
+
+function formatBytes(bytes) {
+  const units = ["B", "KB", "MB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${Number(value.toFixed(1))} ${units[unitIndex]}`;
 }
 
 async function handleFileUpload(event) {
@@ -557,6 +626,7 @@ async function handleFileUpload(event) {
   setStatus(`"${file.name}" 처리 중...`, "busy");
 
   try {
+    validateFileSize(file, isPdf);
     const text = isPdf ? await extractPdfText(file) : await file.text();
 
     if (!text.trim()) {
@@ -568,18 +638,22 @@ async function handleFileUpload(event) {
     }
 
     const submission = state.submissions[index];
-    submission.text = text;
-    resetEvaluation(submission);
+    setSubmissionText(submission, text);
 
     const textarea = item?.querySelector('textarea[data-field="text"]');
-    if (textarea) textarea.value = text;
-    updateInputStatusBadge(item, text);
+    if (textarea) textarea.value = submission.text;
+    updateInputStatusBadge(item, submission.text);
 
-    saveState();
+    const saved = saveState();
     renderReview();
     renderMetrics();
     renderReport();
-    setStatus(`"${file.name}"에서 텍스트를 불러왔습니다.`, "success");
+    setStatus(
+      saved
+        ? `"${file.name}"에서 텍스트를 불러왔습니다.`
+        : `"${file.name}" 텍스트를 화면에 불러왔지만 저장 공간이 부족합니다.`,
+      saved ? "success" : "error",
+    );
   } catch (error) {
     setStatus(`파일을 읽는 중 오류가 발생했습니다: ${error.message}`, "error");
   } finally {
