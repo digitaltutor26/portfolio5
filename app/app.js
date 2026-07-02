@@ -5,31 +5,37 @@ const defaultState = {
     maxScore: 20,
     prompt:
       "환경 문제에 대한 자신의 주장을 세우고, 근거를 들어 설득력 있는 글을 작성한다.",
+    ollamaUrl: "http://localhost:11434",
+    ollamaModel: "gemma3:4b",
   },
   rubric: [
     {
       id: "claim",
       name: "주장 명확성",
       points: 5,
-      hints: "주장, 입장, 결론, 해야 한다",
+      description:
+        "상(5점): 주장이 명확하고 글 전체에 일관되게 유지됨\n중(3점): 주장은 있으나 중간에 흐려지거나 결론이 약함\n하(1점): 주장이 불분명하거나 방향이 여러 갈래로 흩어짐",
     },
     {
       id: "evidence",
       name: "근거와 자료",
       points: 6,
-      hints: "근거, 예를 들어, 자료, 조사, 수치, 사례",
+      description:
+        "상(6점): 구체적 사례나 수치 등 타당한 근거가 2개 이상 제시됨\n중(4점): 근거는 있으나 구체성이 부족하거나 1개에 그침\n하(2점): 근거가 없거나 주장을 단순 반복함",
     },
     {
       id: "structure",
       name: "글의 구성",
       points: 5,
-      hints: "처음, 중간, 끝, 문단, 연결",
+      description:
+        "상(5점): 처음-중간-끝 구조가 명확하고 문단 연결이 자연스러움\n중(3점): 구조는 있으나 연결이 어색하거나 한 부분이 빠짐\n하(1점): 구조 없이 내용이 나열되거나 뒤섞임",
     },
     {
       id: "expression",
       name: "표현과 맞춤법",
       points: 4,
-      hints: "문장, 표현, 맞춤법, 어휘",
+      description:
+        "상(4점): 문장이 명확하고 어휘가 다양하며 맞춤법 오류 없음\n중(2점): 문장이 단조롭거나 맞춤법 오류 2~3개\n하(1점): 문장이 불완전하거나 맞춤법 오류가 많음",
     },
   ],
   submissions: [
@@ -91,6 +97,8 @@ const els = {
   assessmentSubject: document.querySelector("#assessmentSubject"),
   assessmentMax: document.querySelector("#assessmentMax"),
   assessmentPrompt: document.querySelector("#assessmentPrompt"),
+  ollamaUrl: document.querySelector("#ollamaUrl"),
+  ollamaModel: document.querySelector("#ollamaModel"),
   rubricList: document.querySelector("#rubricList"),
   submissionList: document.querySelector("#submissionList"),
   currentStudentId: document.querySelector("#currentStudentId"),
@@ -131,6 +139,8 @@ els.feedbackForm.addEventListener("submit", saveTestFeedback);
   els.assessmentSubject,
   els.assessmentMax,
   els.assessmentPrompt,
+  els.ollamaUrl,
+  els.ollamaModel,
 ].forEach((el) => el.addEventListener("input", updateAssessment));
 
 function loadState() {
@@ -138,9 +148,14 @@ function loadState() {
   if (!raw) return structuredClone(defaultState);
 
   try {
+    const saved = JSON.parse(raw);
     return {
       ...structuredClone(defaultState),
-      ...JSON.parse(raw),
+      ...saved,
+      assessment: {
+        ...structuredClone(defaultState).assessment,
+        ...(saved.assessment || {}),
+      },
     };
   } catch {
     return structuredClone(defaultState);
@@ -165,6 +180,8 @@ function updateAssessment() {
   state.assessment.subject = els.assessmentSubject.value;
   state.assessment.maxScore = Number(els.assessmentMax.value || 20);
   state.assessment.prompt = els.assessmentPrompt.value;
+  state.assessment.ollamaUrl = els.ollamaUrl.value.trim() || "http://localhost:11434";
+  state.assessment.ollamaModel = els.ollamaModel.value.trim() || "gemma3:4b";
   saveState();
   renderMetrics();
 }
@@ -174,7 +191,7 @@ function addCriterion() {
     id: `criterion-${Date.now()}`,
     name: "새 평가 기준",
     points: 3,
-    hints: "핵심어",
+    description: "상(3점): \n중(2점): \n하(1점): ",
   });
   saveState();
   render();
@@ -218,22 +235,49 @@ function moveStudent(direction) {
   render();
 }
 
-function runEvaluation() {
+async function runEvaluation() {
   updateAssessment();
-  state.submissions = state.submissions.map((submission) => evaluateSubmission(submission));
-  const skipped = state.submissions.filter((submission) => submission.status === "pending").length;
-  state.currentIndex = state.submissions.findIndex((item) => item.status !== "approved");
-  if (state.currentIndex < 0) state.currentIndex = 0;
+
+  const button = document.querySelector("#runEvaluation");
+  button.disabled = true;
+  button.textContent = "AI 평가 중...";
+
+  let errorCount = 0;
+  const results = [];
+
+  for (const submission of state.submissions) {
+    try {
+      results.push(await evaluateSubmission(submission));
+    } catch (error) {
+      errorCount++;
+      results.push({
+        ...submission,
+        status: "pending",
+        feedback: `평가 오류: ${error.message}`,
+      });
+    }
+  }
+
+  state.submissions = results;
+  const firstNonApproved = state.submissions.findIndex((s) => s.status !== "approved");
+  state.currentIndex = firstNonApproved >= 0 ? firstNonApproved : 0;
+
   saveState();
   render();
-  showToast(
-    skipped
-      ? `자동 평가가 완료되었습니다. 입력이 없는 ${skipped}명은 평가하지 않았습니다.`
-      : "자동 평가가 완료되었습니다. 교사 검토가 필요합니다.",
-  );
+
+  button.disabled = false;
+  button.textContent = "자동 평가 실행";
+
+  if (errorCount > 0) {
+    showToast(
+      `${errorCount}명 평가 중 오류가 발생했습니다. Ollama 서버 상태를 확인하세요.`,
+    );
+  } else {
+    showToast("AI 평가가 완료되었습니다. 교사 검토 후 승인이 필요합니다.");
+  }
 }
 
-function evaluateSubmission(submission) {
+async function evaluateSubmission(submission) {
   const text = (submission.text || "").trim();
   if (!text) {
     return {
@@ -247,86 +291,103 @@ function evaluateSubmission(submission) {
     };
   }
 
-  const words = tokenize(text);
+  const prompt = buildEvaluationPrompt(text);
+  const ollamaUrl = state.assessment.ollamaUrl || "http://localhost:11434";
+  const model = state.assessment.ollamaModel || "gemma3:4b";
+
+  let response;
+  try {
+    response = await fetch(`${ollamaUrl}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt, format: "json", stream: false }),
+      signal: AbortSignal.timeout(120_000),
+    });
+  } catch (error) {
+    if (error.name === "TimeoutError") {
+      throw new Error("응답 시간 초과(2분). 더 작은 모델을 사용하거나 PC 성능을 확인하세요.");
+    }
+    throw new Error(
+      `Ollama 서버에 연결할 수 없습니다(${ollamaUrl}). Ollama가 실행 중인지 확인하세요.`,
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(`Ollama 서버 오류 (HTTP ${response.status})`);
+  }
+
+  const data = await response.json();
+  return parseOllamaResult(submission, data.response);
+}
+
+function buildEvaluationPrompt(text) {
+  const rubricText = state.rubric
+    .map((c) => `[${c.name}] 배점: ${c.points}점\n${c.description || "기준 설명 없음"}`)
+    .join("\n\n");
+
+  const scoreFields = state.rubric
+    .map((c) => `    "${c.id}": {"score": 숫자, "reason": "채점 근거 1~2문장"}`)
+    .join(",\n");
+
+  return `당신은 ${state.assessment.subject} 수행평가 채점 전문가입니다.
+
+과제: ${state.assessment.prompt}
+
+[루브릭]
+${rubricText}
+
+[학생 제출물]
+${text}
+
+위 루브릭에 따라 채점하고, 반드시 아래 JSON 형식으로만 응답하세요:
+{
+  "scores": {
+${scoreFields}
+  },
+  "feedback": "학생에게 전달할 종합 피드백 2~3문장",
+  "confidence": 채점신뢰도숫자
+}
+
+confidence는 52~96 사이 정수입니다. 제출물이 충분하고 기준이 명확하면 높게, 짧거나 기준과 무관하면 낮게 설정하세요.`;
+}
+
+function parseOllamaResult(submission, responseText) {
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    throw new Error("AI 응답을 파싱할 수 없습니다. 다시 시도해 주세요.");
+  }
+
   const scores = {};
   let total = 0;
-  let evidenceHits = 0;
 
   for (const criterion of state.rubric) {
-    const hints = criterion.hints
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-    const hits = hints.filter((hint) => text.includes(hint));
-    const lengthFactor = Math.min(1, words.length / 70);
-    const hitFactor = hints.length ? hits.length / hints.length : 0.4;
-    const raw = criterion.points * Math.min(1, 0.35 + hitFactor * 0.5 + lengthFactor * 0.3);
-    const score = Math.max(1, Math.round(raw));
-
-    evidenceHits += hits.length;
+    const scoreData = result.scores?.[criterion.id];
+    const raw = Number(scoreData?.score ?? 0);
+    const score = Math.min(criterion.points, Math.max(0, Math.round(raw)));
     total += score;
     scores[criterion.id] = {
       score,
-      evidence: pickEvidence(text, hits[0] || hints[0] || ""),
-      hits,
+      evidence: scoreData?.reason || "근거 없음",
     };
   }
 
-  const maxRubric = state.rubric.reduce((sum, criterion) => sum + Number(criterion.points), 0);
+  const maxRubric = state.rubric.reduce((sum, c) => sum + Number(c.points), 0);
   const scaled = maxRubric
     ? Math.round((total / maxRubric) * Number(state.assessment.maxScore || maxRubric))
     : total;
-  const confidence = Math.min(96, Math.max(52, 58 + evidenceHits * 6 + Math.min(words.length, 90) / 3));
+  const confidence = Math.min(96, Math.max(52, Number(result.confidence || 70)));
 
   return {
     ...submission,
     scores,
     aiScore: scaled,
     teacherScore: submission.teacherScore ?? scaled,
-    confidence: Math.round(confidence),
-    feedback: buildFeedback(scaled, confidence, words.length),
+    confidence,
+    feedback: result.feedback || "",
     status: "review",
   };
-}
-
-function tokenize(text) {
-  return text
-    .replace(/[^\wㄱ-ㅎ가-힣\s]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
-}
-
-function pickEvidence(text, hint) {
-  if (!text) return "제출문이 비어 있습니다.";
-  if (!hint || !text.includes(hint)) return text.slice(0, 80);
-  const index = text.indexOf(hint);
-  const start = Math.max(0, index - 28);
-  const end = Math.min(text.length, index + hint.length + 52);
-  return text.slice(start, end);
-}
-
-function buildFeedback(score, confidence, wordCount) {
-  const max = Number(state.assessment.maxScore || 20);
-  const ratio = score / max;
-  const parts = [];
-
-  if (ratio >= 0.82) {
-    parts.push("주장과 근거가 비교적 분명하며 과제 요구를 잘 반영했습니다.");
-  } else if (ratio >= 0.62) {
-    parts.push("핵심 주장은 드러나지만 근거의 구체성과 글의 연결을 보완하면 좋겠습니다.");
-  } else {
-    parts.push("주장, 근거, 구성 요소를 더 명확히 드러낼 필요가 있습니다.");
-  }
-
-  if (wordCount < 45) {
-    parts.push("분량이 짧아 평가 근거가 제한적입니다.");
-  }
-
-  if (confidence < 70) {
-    parts.push("자동 평가 신뢰도가 낮으므로 교사 확인이 필요합니다.");
-  }
-
-  return parts.join(" ");
 }
 
 function saveReview() {
@@ -428,6 +489,8 @@ function renderAssessment() {
   els.assessmentSubject.value = state.assessment.subject;
   els.assessmentMax.value = state.assessment.maxScore;
   els.assessmentPrompt.value = state.assessment.prompt;
+  els.ollamaUrl.value = state.assessment.ollamaUrl || "http://localhost:11434";
+  els.ollamaModel.value = state.assessment.ollamaModel || "gemma3:4b";
   document.querySelector("h1").textContent = state.assessment.title;
   document.querySelector(".eyebrow").textContent = `${state.assessment.subject} · 프로젝트형 수행평가`;
 }
@@ -447,11 +510,11 @@ function renderRubric() {
         </label>
         <button type="button" class="ghost-button compact danger" data-delete="${index}" aria-label="기준 삭제">삭제</button>
       </div>
-      <label>핵심 단서
-        <input value="${escapeHtml(criterion.hints)}" data-field="hints" data-index="${index}" />
+      <label>채점 기준 설명
+        <textarea rows="3" data-field="description" data-index="${index}" placeholder="상(만점): ...\n중(중간): ...\n하(최저): ...">${escapeHtml(criterion.description || "")}</textarea>
       </label>
     `;
-    item.querySelectorAll("input").forEach((input) => {
+    item.querySelectorAll("input, textarea").forEach((input) => {
       input.addEventListener("input", updateCriterion);
     });
     item.querySelector("[data-delete]").addEventListener("click", (e) => {
@@ -820,11 +883,13 @@ function deleteFeedback(id) {
 }
 
 function statusLabel(status) {
-  return {
-    pending: "대기",
-    review: "검토",
-    approved: "승인",
-  }[status] || "대기";
+  return (
+    {
+      pending: "대기",
+      review: "검토",
+      approved: "승인",
+    }[status] || "대기"
+  );
 }
 
 function escapeHtml(value) {

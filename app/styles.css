@@ -343,6 +343,18 @@ textarea {
   padding: 0 16px 16px;
 }
 
+.ollama-settings {
+  padding: 0 16px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.ollama-settings-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .rubric-list,
 .submission-list {
   display: grid;

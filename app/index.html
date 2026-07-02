@@ -100,6 +100,21 @@
               과제 안내
               <textarea id="assessmentPrompt">환경 문제에 대한 자신의 주장을 세우고, 근거를 들어 설득력 있는 글을 작성한다.</textarea>
             </label>
+            <div class="ollama-settings">
+              <div class="ollama-settings-header">
+                <span class="pill">AI 평가 설정 (Ollama)</span>
+              </div>
+              <div class="form-grid">
+                <label>
+                  Ollama 서버 주소
+                  <input id="ollamaUrl" value="http://localhost:11434" placeholder="http://localhost:11434" />
+                </label>
+                <label>
+                  모델명
+                  <input id="ollamaModel" value="gemma3:4b" placeholder="gemma3:4b" />
+                </label>
+              </div>
+            </div>
           </div>
 
           <div class="panel rubric-panel" id="rubric">
