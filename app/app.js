@@ -149,7 +149,7 @@ function loadState() {
 
   try {
     const saved = JSON.parse(raw);
-    return {
+    const merged = {
       ...structuredClone(defaultState),
       ...saved,
       assessment: {
@@ -157,6 +157,11 @@ function loadState() {
         ...(saved.assessment || {}),
       },
     };
+    merged.rubric = merged.rubric.map((c) => ({
+      ...c,
+      description: c.description || (c.hints ? `핵심 단서: ${c.hints}` : ""),
+    }));
+    return merged;
   } catch {
     return structuredClone(defaultState);
   }
@@ -245,35 +250,37 @@ async function runEvaluation() {
   let errorCount = 0;
   const results = [];
 
-  for (const submission of state.submissions) {
-    try {
-      results.push(await evaluateSubmission(submission));
-    } catch (error) {
-      errorCount++;
-      results.push({
-        ...submission,
-        status: "pending",
-        feedback: `평가 오류: ${error.message}`,
-      });
+  try {
+    for (const submission of state.submissions) {
+      try {
+        results.push(await evaluateSubmission(submission));
+      } catch (error) {
+        errorCount++;
+        results.push({
+          ...submission,
+          status: "pending",
+          feedback: `평가 오류: ${error.message}`,
+        });
+      }
     }
-  }
 
-  state.submissions = results;
-  const firstNonApproved = state.submissions.findIndex((s) => s.status !== "approved");
-  state.currentIndex = firstNonApproved >= 0 ? firstNonApproved : 0;
+    state.submissions = results;
+    const firstNonApproved = state.submissions.findIndex((s) => s.status !== "approved");
+    state.currentIndex = firstNonApproved >= 0 ? firstNonApproved : 0;
 
-  saveState();
-  render();
+    saveState();
+    render();
 
-  button.disabled = false;
-  button.textContent = "자동 평가 실행";
-
-  if (errorCount > 0) {
-    showToast(
-      `${errorCount}명 평가 중 오류가 발생했습니다. Ollama 서버 상태를 확인하세요.`,
-    );
-  } else {
-    showToast("AI 평가가 완료되었습니다. 교사 검토 후 승인이 필요합니다.");
+    if (errorCount > 0) {
+      showToast(
+        `${errorCount}명 평가 중 오류가 발생했습니다. Ollama 서버 상태를 확인하세요.`,
+      );
+    } else {
+      showToast("AI 평가가 완료되었습니다. 교사 검토 후 승인이 필요합니다.");
+    }
+  } finally {
+    button.disabled = false;
+    button.textContent = "자동 평가 실행";
   }
 }
 
@@ -354,7 +361,8 @@ confidence는 52~96 사이 정수입니다. 제출물이 충분하고 기준이 
 function parseOllamaResult(submission, responseText) {
   let result;
   try {
-    result = JSON.parse(responseText);
+    const cleaned = responseText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    result = JSON.parse(cleaned);
   } catch {
     throw new Error("AI 응답을 파싱할 수 없습니다. 다시 시도해 주세요.");
   }
