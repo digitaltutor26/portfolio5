@@ -230,6 +230,9 @@ function resetDemo() {
 }
 
 function getCurrentSubmission() {
+  if (state.currentIndex >= state.submissions.length) {
+    state.currentIndex = 0;
+  }
   return state.submissions[state.currentIndex] || state.submissions[0];
 }
 
@@ -259,6 +262,9 @@ async function runEvaluation() {
         results.push({
           ...submission,
           status: "pending",
+          scores: {},
+          aiScore: null,
+          confidence: null,
           feedback: `평가 오류: ${error.message}`,
         });
       }
@@ -432,7 +438,14 @@ function exportCsv() {
     ]),
   ];
   const csv = rows
-    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
+    .map((row) =>
+      row
+        .map((cell) => {
+          const s = String(cell).replaceAll('"', '""');
+          return /^[=+\-@]/.test(s) ? `"'${s}"` : `"${s}"`;
+        })
+        .join(","),
+    )
     .join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -765,6 +778,7 @@ function renderReview() {
   els.currentScore.textContent = current.aiScore === null ? "-" : `${current.aiScore}/${state.assessment.maxScore}`;
   els.currentConfidence.textContent =
     current.confidence === null ? "신뢰도 -" : `신뢰도 ${current.confidence}%`;
+  els.teacherScore.max = state.assessment.maxScore;
   els.teacherScore.value = current.teacherScore ?? "";
   els.feedbackText.value = current.feedback || "";
   els.teacherNote.value = current.note || "";
@@ -790,7 +804,7 @@ function renderMetrics() {
   const filled = state.submissions.filter((item) => item.text.trim().length > 0).length;
   const approved = state.submissions.filter((item) => item.status === "approved").length;
   const pending = state.submissions.filter((item) => item.status !== "approved").length;
-  const scored = state.submissions.filter((item) => item.teacherScore !== null);
+  const scored = state.submissions.filter((item) => item.status === "approved" && item.teacherScore !== null);
   const average = scored.length
     ? (scored.reduce((sum, item) => sum + Number(item.teacherScore), 0) / scored.length).toFixed(1)
     : "-";
