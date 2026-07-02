@@ -445,6 +445,7 @@ function renderRubric() {
         <label>배점
           <input type="number" min="1" value="${criterion.points}" data-field="points" data-index="${index}" />
         </label>
+        <button type="button" class="ghost-button compact danger" data-delete="${index}" aria-label="기준 삭제">삭제</button>
       </div>
       <label>핵심 단서
         <input value="${escapeHtml(criterion.hints)}" data-field="hints" data-index="${index}" />
@@ -453,8 +454,21 @@ function renderRubric() {
     item.querySelectorAll("input").forEach((input) => {
       input.addEventListener("input", updateCriterion);
     });
+    item.querySelector("[data-delete]").addEventListener("click", (e) => {
+      deleteCriterion(Number(e.currentTarget.dataset.delete));
+    });
     els.rubricList.appendChild(item);
   });
+}
+
+function deleteCriterion(index) {
+  if (state.rubric.length <= 1) {
+    showToast("기준이 하나 이상 있어야 합니다.");
+    return;
+  }
+  state.rubric.splice(index, 1);
+  saveState();
+  render();
 }
 
 function updateCriterion(event) {
@@ -492,6 +506,7 @@ function renderSubmissions() {
       state.currentIndex = index;
       saveState();
       render();
+      document.querySelector("#review").scrollIntoView({ behavior: "smooth" });
     });
     item.querySelectorAll("input, textarea").forEach((input) => {
       if (input.type === "file") return;
@@ -558,10 +573,16 @@ let pdfjsLibPromise = null;
 
 function loadPdfJs() {
   if (!pdfjsLibPromise) {
-    pdfjsLibPromise = import(PDFJS_URL).then((lib) => {
-      lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
-      return lib;
-    });
+    pdfjsLibPromise = import(PDFJS_URL)
+      .then((lib) => {
+        lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+        return lib;
+      })
+      .catch(() => {
+        throw new Error(
+          "PDF 로딩 실패: 로컬 파일로 직접 열면 PDF를 불러올 수 없습니다. 터미널에서 'npx serve app/' 명령으로 로컬 서버를 실행한 뒤 접속해 주세요.",
+        );
+      });
   }
   return pdfjsLibPromise;
 }
@@ -769,6 +790,7 @@ function renderFeedback() {
       <header>
         <span>응답 ${feedbackItems.length - index}</span>
         <time>${formatDateTime(item.createdAt)}</time>
+        <button type="button" class="ghost-button compact danger" data-delete-feedback="${item.id}" aria-label="피드백 삭제">삭제</button>
       </header>
       <dl>
         <dt>시작 이해</dt>
@@ -783,8 +805,18 @@ function renderFeedback() {
         <dd>${escapeHtml(item.neededFeature || "없음")}</dd>
       </dl>
     `;
+    div.querySelector("[data-delete-feedback]").addEventListener("click", (e) => {
+      deleteFeedback(e.currentTarget.dataset.deleteFeedback);
+    });
     els.feedbackList.appendChild(div);
   });
+}
+
+function deleteFeedback(id) {
+  state.testFeedback = (state.testFeedback || []).filter((item) => item.id !== id);
+  saveState();
+  renderFeedback();
+  showToast("피드백이 삭제되었습니다.");
 }
 
 function statusLabel(status) {

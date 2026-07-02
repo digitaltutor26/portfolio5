@@ -361,8 +361,19 @@ textarea {
 
 .criterion-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 84px;
+  grid-template-columns: minmax(0, 1fr) 84px auto;
   gap: 8px;
+  align-items: end;
+}
+
+.ghost-button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.ghost-button.danger:hover {
+  background: var(--danger);
+  color: #ffffff;
 }
 
 .submission-item {
