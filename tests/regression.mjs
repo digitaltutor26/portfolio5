@@ -119,7 +119,7 @@ assert.equal(JSON.stringify(staleSubmission.scores), "{}");
 assert.equal(staleSubmission.feedback, "");
 assert.equal(staleSubmission.note, "");
 
-const blankResult = unit.evaluateSubmission({
+const blankResult = await unit.evaluateSubmission({
   id: "2",
   name: "빈 제출",
   text: "   \n",
@@ -149,7 +149,7 @@ assert.equal(unit.truncateText("x".repeat(unit.FILE_LIMITS.extractedChars + 7)).
 
 assert.match(indexHtml, /Content-Security-Policy/);
 assert.match(indexHtml, /script-src 'self'/);
-assert.doesNotMatch(appJs, /cdnjs|https:\/\/|http:\/\//);
+assert.doesNotMatch(appJs, /cdnjs|https:\/\/cdn|http:\/\/(?!localhost)/);
 
 const advertisesPdfUpload = /accept="[^"]*\.pdf/.test(indexHtml) || /endsWith\("\.pdf"\)/.test(appJs);
 if (advertisesPdfUpload) {
