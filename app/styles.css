@@ -333,6 +333,13 @@ textarea {
   padding: 9px 10px;
 }
 
+.field-hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 textarea {
   min-height: 92px;
   resize: vertical;

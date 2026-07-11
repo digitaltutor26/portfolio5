@@ -85,6 +85,13 @@ const defaultState = {
 
 let state = loadState();
 
+const DEFAULT_OLLAMA_URL = "http://localhost:11434";
+const DEFAULT_OLLAMA_MODEL = "gemma3:4b";
+const ALLOWED_OLLAMA_ORIGINS = new Set([
+  "http://localhost:11434",
+  ["http:", "//", "127.0.0.1:11434"].join(""),
+]);
+
 const FILE_LIMITS = {
   textBytes: 256 * 1024,
   pdfBytes: 5 * 1024 * 1024,
@@ -148,23 +155,153 @@ function loadState() {
   if (!raw) return structuredClone(defaultState);
 
   try {
-    const saved = JSON.parse(raw);
-    const merged = {
-      ...structuredClone(defaultState),
-      ...saved,
-      assessment: {
-        ...structuredClone(defaultState).assessment,
-        ...(saved.assessment || {}),
-      },
-    };
-    merged.rubric = merged.rubric.map((c) => ({
-      ...c,
-      description: c.description || (c.hints ? `핵심 단서: ${c.hints}` : ""),
-    }));
-    return merged;
+    return normalizeState(JSON.parse(raw));
   } catch {
     return structuredClone(defaultState);
   }
+}
+
+function normalizeState(saved) {
+  const fallback = structuredClone(defaultState);
+  if (!saved || typeof saved !== "object") return fallback;
+
+  const assessment = saved.assessment && typeof saved.assessment === "object" ? saved.assessment : {};
+  const maxScore = Number(assessment.maxScore);
+  const rubric = Array.isArray(saved.rubric) && saved.rubric.length > 0 ? saved.rubric : fallback.rubric;
+  const submissions =
+    Array.isArray(saved.submissions) && saved.submissions.length > 0
+      ? saved.submissions
+      : fallback.submissions;
+
+  const normalized = {
+    ...fallback,
+    assessment: {
+      ...fallback.assessment,
+      title: typeof assessment.title === "string" ? assessment.title : fallback.assessment.title,
+      subject:
+        typeof assessment.subject === "string" ? assessment.subject : fallback.assessment.subject,
+      maxScore: Number.isFinite(maxScore) && maxScore > 0 ? maxScore : fallback.assessment.maxScore,
+      prompt: typeof assessment.prompt === "string" ? assessment.prompt : fallback.assessment.prompt,
+      ollamaUrl:
+        typeof assessment.ollamaUrl === "string" && assessment.ollamaUrl.trim()
+          ? assessment.ollamaUrl.trim()
+          : DEFAULT_OLLAMA_URL,
+      ollamaModel:
+        typeof assessment.ollamaModel === "string" && assessment.ollamaModel.trim()
+          ? assessment.ollamaModel.trim()
+          : DEFAULT_OLLAMA_MODEL,
+    },
+    rubric: rubric.map(normalizeCriterion),
+    submissions: submissions.map(normalizeSubmission),
+    testFeedback: Array.isArray(saved.testFeedback) ? saved.testFeedback : fallback.testFeedback,
+  };
+
+  normalized.submissions.forEach((submission) => {
+    if (!isScoreWithinMax(submission.aiScore, normalized.assessment.maxScore)) {
+      submission.aiScore = null;
+    }
+    if (!isScoreWithinMax(submission.teacherScore, normalized.assessment.maxScore)) {
+      submission.teacherScore = null;
+    }
+    if (submission.status === "approved" && submission.teacherScore === null) {
+      submission.status = submission.aiScore === null ? "pending" : "review";
+    }
+  });
+
+  const requestedIndex = Number(saved.currentIndex);
+  normalized.currentIndex =
+    Number.isInteger(requestedIndex) && requestedIndex >= 0
+      ? Math.min(requestedIndex, normalized.submissions.length - 1)
+      : 0;
+
+  return normalized;
+}
+
+function normalizeCriterion(criterion, index) {
+  const fallback = defaultState.rubric[index] || defaultState.rubric[0];
+  const points = Number(criterion?.points);
+  return {
+    id:
+      typeof criterion?.id === "string" && criterion.id.trim()
+        ? criterion.id.trim()
+        : fallback.id,
+    name:
+      typeof criterion?.name === "string" && criterion.name.trim()
+        ? criterion.name
+        : fallback.name,
+    points: Number.isFinite(points) && points > 0 ? points : fallback.points,
+    description:
+      typeof criterion?.description === "string"
+        ? criterion.description
+        : criterion?.hints
+          ? `핵심 단서: ${criterion.hints}`
+          : fallback.description,
+  };
+}
+
+function normalizeSubmission(submission, index) {
+  const fallback = defaultState.submissions[index] || {
+    id: `${20200 + index + 1}`,
+    name: "새 학생",
+    text: "",
+    status: "pending",
+    scores: {},
+    aiScore: null,
+    teacherScore: null,
+    confidence: null,
+    feedback: "",
+    note: "",
+  };
+  const status = ["pending", "review", "approved"].includes(submission?.status)
+    ? submission.status
+    : fallback.status;
+  return {
+    id: typeof submission?.id === "string" ? submission.id : fallback.id,
+    name: typeof submission?.name === "string" ? submission.name : fallback.name,
+    text: typeof submission?.text === "string" ? truncateText(submission.text) : fallback.text,
+    status,
+    scores: submission?.scores && typeof submission.scores === "object" ? submission.scores : {},
+    aiScore: normalizeNullableNumber(submission?.aiScore),
+    teacherScore: normalizeNullableNumber(submission?.teacherScore),
+    confidence: normalizeNullableNumber(submission?.confidence),
+    feedback: typeof submission?.feedback === "string" ? submission.feedback : "",
+    note: typeof submission?.note === "string" ? submission.note : "",
+  };
+}
+
+function normalizeNullableNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function isScoreWithinMax(value, maxScore) {
+  return value === null || (Number.isFinite(value) && value >= 0 && value <= maxScore);
+}
+
+function validateOllamaUrl(value) {
+  const raw = String(value || "").trim() || DEFAULT_OLLAMA_URL;
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return {
+      valid: false,
+      message: "Ollama 서버 주소는 localhost:11434 또는 127.0.0.1:11434만 사용할 수 있습니다.",
+    };
+  }
+
+  if (!ALLOWED_OLLAMA_ORIGINS.has(url.origin)) {
+    return {
+      valid: false,
+      message: "보안 정책상 Ollama 서버 주소는 localhost 또는 127.0.0.1:11434로 제한됩니다.",
+    };
+  }
+
+  return {
+    valid: true,
+    url: url.origin,
+  };
 }
 
 function saveState() {
@@ -183,10 +320,12 @@ function saveState() {
 function updateAssessment() {
   state.assessment.title = els.assessmentTitle.value;
   state.assessment.subject = els.assessmentSubject.value;
-  state.assessment.maxScore = Number(els.assessmentMax.value || 20);
+  const maxScore = Number(els.assessmentMax.value || defaultState.assessment.maxScore);
+  state.assessment.maxScore =
+    Number.isFinite(maxScore) && maxScore > 0 ? maxScore : defaultState.assessment.maxScore;
   state.assessment.prompt = els.assessmentPrompt.value;
-  state.assessment.ollamaUrl = els.ollamaUrl.value.trim() || "http://localhost:11434";
-  state.assessment.ollamaModel = els.ollamaModel.value.trim() || "gemma3:4b";
+  state.assessment.ollamaUrl = els.ollamaUrl.value.trim() || DEFAULT_OLLAMA_URL;
+  state.assessment.ollamaModel = els.ollamaModel.value.trim() || DEFAULT_OLLAMA_MODEL;
   saveState();
   renderMetrics();
 }
@@ -245,32 +384,65 @@ function moveStudent(direction) {
 
 async function runEvaluation() {
   updateAssessment();
+  const ollamaValidation = validateOllamaUrl(state.assessment.ollamaUrl);
+  if (!ollamaValidation.valid) {
+    showToast(ollamaValidation.message);
+    return;
+  }
 
   const button = document.querySelector("#runEvaluation");
   button.disabled = true;
   button.textContent = "AI 평가 중...";
 
   let errorCount = 0;
+  let skippedChangedCount = 0;
+  const runContext = {
+    assessment: structuredClone(state.assessment),
+    rubric: structuredClone(state.rubric),
+  };
+  runContext.assessment.ollamaUrl = ollamaValidation.url;
+  const evaluationTargets = state.submissions.map((submission, index) => ({
+    index,
+    submission: structuredClone(submission),
+  }));
   const results = [];
 
   try {
-    for (const submission of state.submissions) {
+    for (const target of evaluationTargets) {
       try {
-        results.push(await evaluateSubmission(submission));
+        results.push({
+          index: target.index,
+          sourceText: target.submission.text,
+          sourceId: target.submission.id,
+          submission: await evaluateSubmission(target.submission, runContext),
+        });
       } catch (error) {
         errorCount++;
         results.push({
-          ...submission,
-          status: "pending",
-          scores: {},
-          aiScore: null,
-          confidence: null,
-          feedback: `평가 오류: ${error.message}`,
+          index: target.index,
+          sourceText: target.submission.text,
+          sourceId: target.submission.id,
+          submission: {
+            ...target.submission,
+            status: "pending",
+            scores: {},
+            aiScore: null,
+            confidence: null,
+            feedback: `평가 오류: ${error.message}`,
+          },
         });
       }
     }
 
-    state.submissions = results;
+    for (const result of results) {
+      const current = state.submissions[result.index];
+      if (!current || current.id !== result.sourceId || current.text !== result.sourceText) {
+        skippedChangedCount++;
+        continue;
+      }
+      state.submissions[result.index] = result.submission;
+    }
+
     const firstNonApproved = state.submissions.findIndex((s) => s.status !== "approved");
     state.currentIndex = firstNonApproved >= 0 ? firstNonApproved : 0;
 
@@ -281,6 +453,8 @@ async function runEvaluation() {
       showToast(
         `${errorCount}명 평가 중 오류가 발생했습니다. Ollama 서버 상태를 확인하세요.`,
       );
+    } else if (skippedChangedCount > 0) {
+      showToast(`${skippedChangedCount}명은 평가 중 수정되어 기존 입력을 유지했습니다.`);
     } else {
       showToast("AI 평가가 완료되었습니다. 교사 검토 후 승인이 필요합니다.");
     }
@@ -290,7 +464,7 @@ async function runEvaluation() {
   }
 }
 
-async function evaluateSubmission(submission) {
+async function evaluateSubmission(submission, context = state) {
   const text = (submission.text || "").trim();
   if (!text) {
     return {
@@ -304,9 +478,9 @@ async function evaluateSubmission(submission) {
     };
   }
 
-  const prompt = buildEvaluationPrompt(text);
-  const ollamaUrl = state.assessment.ollamaUrl || "http://localhost:11434";
-  const model = state.assessment.ollamaModel || "gemma3:4b";
+  const prompt = buildEvaluationPrompt(text, context);
+  const ollamaUrl = context.assessment.ollamaUrl || DEFAULT_OLLAMA_URL;
+  const model = context.assessment.ollamaModel || DEFAULT_OLLAMA_MODEL;
 
   let response;
   try {
@@ -330,21 +504,21 @@ async function evaluateSubmission(submission) {
   }
 
   const data = await response.json();
-  return parseOllamaResult(submission, data.response);
+  return parseOllamaResult(submission, data.response, context);
 }
 
-function buildEvaluationPrompt(text) {
-  const rubricText = state.rubric
+function buildEvaluationPrompt(text, context = state) {
+  const rubricText = context.rubric
     .map((c) => `[${c.name}] 배점: ${c.points}점\n${c.description || "기준 설명 없음"}`)
     .join("\n\n");
 
-  const scoreFields = state.rubric
+  const scoreFields = context.rubric
     .map((c) => `    "${c.id}": {"score": 숫자, "reason": "채점 근거 1~2문장"}`)
     .join(",\n");
 
-  return `당신은 ${state.assessment.subject} 수행평가 채점 전문가입니다.
+  return `당신은 ${context.assessment.subject} 수행평가 채점 전문가입니다.
 
-과제: ${state.assessment.prompt}
+과제: ${context.assessment.prompt}
 
 [루브릭]
 ${rubricText}
@@ -364,7 +538,7 @@ ${scoreFields}
 confidence는 52~96 사이 정수입니다. 제출물이 충분하고 기준이 명확하면 높게, 짧거나 기준과 무관하면 낮게 설정하세요.`;
 }
 
-function parseOllamaResult(submission, responseText) {
+function parseOllamaResult(submission, responseText, context = state) {
   let result;
   try {
     const cleaned = responseText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
@@ -376,7 +550,7 @@ function parseOllamaResult(submission, responseText) {
   const scores = {};
   let total = 0;
 
-  for (const criterion of state.rubric) {
+  for (const criterion of context.rubric) {
     const scoreData = result.scores?.[criterion.id];
     const raw = Number(scoreData?.score ?? 0);
     const score = Math.min(criterion.points, Math.max(0, Math.round(raw)));
@@ -387,9 +561,9 @@ function parseOllamaResult(submission, responseText) {
     };
   }
 
-  const maxRubric = state.rubric.reduce((sum, c) => sum + Number(c.points), 0);
+  const maxRubric = context.rubric.reduce((sum, c) => sum + Number(c.points), 0);
   const scaled = maxRubric
-    ? Math.round((total / maxRubric) * Number(state.assessment.maxScore || maxRubric))
+    ? Math.round((total / maxRubric) * Number(context.assessment.maxScore || maxRubric))
     : total;
   const confidence = Math.min(96, Math.max(52, Number(result.confidence || 70)));
 
@@ -406,22 +580,54 @@ function parseOllamaResult(submission, responseText) {
 
 function saveReview() {
   const current = getCurrentSubmission();
-  current.teacherScore = Number(els.teacherScore.value || 0);
+  const teacherScore = parseTeacherScore(els.teacherScore.value);
+  if (!teacherScore.valid) {
+    showToast(teacherScore.message);
+    return false;
+  }
+
+  current.teacherScore = teacherScore.value;
   current.feedback = els.feedbackText.value;
   current.note = els.teacherNote.value;
   if (current.status === "approved") current.status = "review";
   saveState();
   render();
   showToast("검토 내용이 저장되었습니다.");
+  return true;
 }
 
 function approveReview() {
-  saveReview();
+  if (!saveReview()) return;
   const current = getCurrentSubmission();
+  if (current.status !== "review" || current.aiScore === null || current.confidence === null) {
+    showToast("AI 평가가 완료된 검토 상태의 제출물만 승인할 수 있습니다.");
+    return;
+  }
+  if (current.teacherScore === null) {
+    showToast("승인하려면 교사 최종 점수를 입력하세요.");
+    return;
+  }
   current.status = "approved";
   saveState();
   render();
   showToast(`${current.name} 결과가 승인되었습니다.`);
+}
+
+function parseTeacherScore(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return { valid: true, value: null };
+  }
+
+  const number = Number(raw);
+  const maxScore = Number(state.assessment.maxScore);
+  if (!Number.isFinite(number)) {
+    return { valid: false, message: "교사 최종 점수는 숫자로 입력하세요." };
+  }
+  if (number < 0 || number > maxScore) {
+    return { valid: false, message: `교사 최종 점수는 0점부터 ${maxScore}점 사이여야 합니다.` };
+  }
+  return { valid: true, value: number };
 }
 
 function exportCsv() {

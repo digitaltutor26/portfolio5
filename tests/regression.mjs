@@ -83,6 +83,9 @@ globalThis.__auto1Test = {
   get state() { return state; },
   set state(value) { state = value; },
   evaluateSubmission,
+  normalizeState,
+  parseTeacherScore,
+  validateOllamaUrl,
   setSubmissionText,
   validateFileSize,
   truncateText,
@@ -136,6 +139,53 @@ assert.equal(blankResult.teacherScore, null);
 assert.equal(blankResult.confidence, null);
 assert.equal(JSON.stringify(blankResult.scores), "{}");
 assert.equal(blankResult.feedback, "");
+
+assert.equal(unit.validateOllamaUrl("http://localhost:11434").valid, true);
+assert.equal(unit.validateOllamaUrl("http://127.0.0.1:11434").valid, true);
+assert.equal(unit.validateOllamaUrl("http://192.168.0.5:11434").valid, false);
+assert.equal(unit.validateOllamaUrl("not a url").valid, false);
+
+unit.state = {
+  ...unit.state,
+  assessment: {
+    ...unit.state.assessment,
+    maxScore: 20,
+  },
+};
+assert.deepEqual(unit.parseTeacherScore("").value, null);
+assert.equal(unit.parseTeacherScore("18").valid, true);
+assert.equal(unit.parseTeacherScore("21").valid, false);
+assert.equal(unit.parseTeacherScore("abc").valid, false);
+
+const repaired = unit.normalizeState({
+  assessment: {
+    maxScore: "20",
+    ollamaUrl: "http://192.168.0.5:11434",
+  },
+  rubric: "bad",
+  submissions: [
+    {
+      id: 7,
+      name: 8,
+      text: "ok",
+      status: "approved",
+      aiScore: 99,
+      teacherScore: "bad",
+      scores: null,
+    },
+  ],
+  currentIndex: 99,
+  testFeedback: "bad",
+});
+assert.equal(repaired.assessment.maxScore, 20);
+assert.equal(repaired.assessment.ollamaUrl, "http://192.168.0.5:11434");
+assert.equal(repaired.rubric.length, unit.defaultState.rubric.length);
+assert.equal(repaired.submissions.length, 1);
+assert.equal(repaired.submissions[0].status, "pending");
+assert.equal(repaired.submissions[0].aiScore, null);
+assert.equal(repaired.submissions[0].teacherScore, null);
+assert.equal(repaired.currentIndex, 0);
+assert.deepEqual(repaired.testFeedback, []);
 
 assert.throws(
   () => unit.validateFileSize({ size: unit.FILE_LIMITS.textBytes + 1 }, false),
