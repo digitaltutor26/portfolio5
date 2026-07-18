@@ -1,76 +1,142 @@
-# portfolio5
+# Auto1 — 수행평가 AI 평가 보조 도구
 
-AI 기반 업무 자동화와 운영 개선을 실험하는 저장소입니다.
+AI가 루브릭 기준에 따라 학생 제출물을 1차 채점하고, 교사가 최종 검토·승인하는 교사용 수행평가 보조 도구입니다.
 
-## Auto1
+**배포 주소**: https://digitaltutor26.github.io/portfolio5/  
+**저장소**: https://github.com/digitaltutor26/portfolio5
 
-현재 이 폴더의 핵심 목표는 **학생 수행평가 자동 평가 도구**를 만드는 것입니다.
-
-이 도구는 AI가 점수와 피드백을 제안하되, 최종 판단은 교사가 검토하고 승인하는 구조를 전제로 합니다. 마케팅용 소개 페이지가 아니라 실제 교사가 반복적으로 사용할 수 있는 운영형 도구를 목표로 합니다.
+---
 
 ## 핵심 흐름
 
-1. 평가 과제를 생성합니다.
-2. 루브릭을 작성하거나 가져옵니다.
-3. 학생 제출물을 업로드하거나 붙여넣습니다.
-4. AI 보조 평가를 실행합니다.
-5. 점수, 근거, 피드백을 교사가 검토합니다.
-6. 교사가 승인하거나 점수와 피드백을 수정합니다.
-7. 학급 결과와 피드백을 CSV 등으로 내보냅니다.
+1. 평가 설정 (과제명, 학년/과목, 만점)
+2. 루브릭 작성 (기준명, 배점, 채점 기준 설명)
+3. 학생 제출물 입력 (직접 입력 또는 .txt/.pdf 업로드)
+4. AI 자동 평가 실행 (Ollama 로컬 LLM)
+5. 교사 검토 — AI 점수·근거 확인 후 수정
+6. 승인 처리
+7. 학급 리포트 확인 및 CSV 내보내기
 
-제품 방향, UX 원칙, 화면 구조는 `DESIGN.md`에 정리되어 있습니다.
+---
 
-## 프로토타입 실행
+## 현재 구현 기능
 
-첫 번째 정적 프로토타입은 브라우저에서 바로 열 수 있습니다.
+| 기능 | 상태 |
+|------|------|
+| 평가 설정 (과제명, 학년, 만점) | ✅ |
+| 루브릭 기준 추가/수정/삭제 | ✅ |
+| 학생 제출물 직접 입력 | ✅ |
+| .txt / .pdf 파일 업로드 | ✅ |
+| Ollama AI 자동 채점 | ✅ |
+| 기준별 점수 및 채점 근거 표시 | ✅ |
+| 교사 최종 점수·피드백 저장 | ✅ |
+| 승인 처리 | ✅ |
+| 학급 점수 분포 리포트 | ✅ |
+| CSV 내보내기 | ✅ |
+| 사용자 테스트 피드백 수집 | ✅ |
+| GitHub Pages 자동 배포 | ✅ |
 
-```text
-app/index.html
+---
+
+## 실행 방법
+
+### 로컬 실행 (AI 평가 포함)
+
+```sh
+# 1. Ollama 설치 및 모델 다운로드 (최초 1회)
+ollama pull gemma3:4b
+
+# 2. 앱 서버 시작
+npx serve app/
+
+# 3. 브라우저에서 접속
+http://localhost:3000
 ```
 
-현재 프로토타입에 포함된 기능:
+> Windows PC 설치 가이드 → `INSTALL_GUIDE.md` 참고
 
-- 평가 설정
-- 루브릭 편집
-- 샘플 학생 제출물 관리
-- 로컬 AI-style 자동 평가 시뮬레이션
-- 기준별 점수와 근거 표시
-- 교사 최종 점수, 피드백, 메모 저장
-- 승인 처리
-- 학급 요약 리포트
-- CSV 내보내기
-- 사용자 테스트 피드백 문답 저장
-- 피드백 JSON 내보내기
+### GitHub Pages (AI 평가 없이 UI만)
+
+```
+https://digitaltutor26.github.io/portfolio5/
+```
+
+> Ollama 없이도 UI, 루브릭 편집, 피드백 수집은 동작합니다.  
+> AI 자동 평가 기능은 로컬에 Ollama가 실행 중이어야 합니다.
+
+---
+
+## AI 평가 구조
+
+```
+브라우저 → fetch → Ollama (localhost:11434)
+                        ↓ 루브릭 기반 채점
+               점수 + 근거 + 피드백 반환
+                        ↓
+              교사 검토 → 수정 → 승인
+```
+
+- **모델 추천**: RAM 8GB → `gemma3:4b` / RAM 16GB → `gemma3:12b`
+- **CSP 정책**: `localhost:11434` 및 `127.0.0.1:11434`만 연결 허용
+- **교사 권한 우선**: AI 점수는 제안값이며 교사 승인 없이 최종 반영되지 않음
+
+---
 
 ## 자동화 하네스
 
-`codex_harness/`에는 Codex CLI 기반 멀티 에이전트 자동화 하네스가 들어 있습니다.
+이 저장소에는 두 개의 자동화 하네스가 있습니다.
 
-하네스가 지원하는 기능:
+| 하네스 | 용도 |
+|--------|------|
+| **Claude Code (OMC)** | 기본 작업 도구. 구현·디버깅·리뷰 |
+| **Codex Harness** (`codex_harness/`) | Claude Code 작업 커밋 후 2차 검증 |
 
-- 대상 프로젝트 초기화
-- 역할 기반 워크플로 실행
-- 비대화형 자동 실행 정책
-- 리뷰 결과에 따른 자동 수정 루프
-- 실행 리포트 생성
+```sh
+# Codex Harness 2차 검증 실행
+node codex_harness/scripts/agent-runner.mjs review-and-refactor "검토 범위"
+```
 
-장기 기준 GitHub 저장소는 `digitaltutor26/portfolio5`입니다.
+> **주의**: 두 하네스를 같은 워킹트리에서 동시에 실행하지 않습니다.  
+> 자세한 정책은 `CLAUDE.md` 참고.
 
-## 하네스 사용 정책
+---
 
-이 저장소에는 두 개의 자동화 하네스가 있고, 역할이 분리되어 있습니다.
+## 파일 구조
 
-1. **Claude Code (OMC)** — 사람과 직접 대화하며 코드를 수정하는 기본 작업 도구. 구현, 디버깅, 리뷰 등 일상적인 작업은 이쪽으로 진행합니다.
-2. **codex_harness** — Codex CLI를 별도 프로세스로 띄워 architect/implementer/tester/reviewer/debugger 역할을 순차 실행하는 하네스(`codex_harness/scripts/agent-runner.mjs`). Claude Code 작업이 끝나고 커밋된 뒤, 별도 모델 관점의 2차 검증으로만 사용합니다(주로 `review-and-refactor` 워크플로).
+```
+auto1/
+├── app/
+│   ├── index.html              # 앱 UI
+│   ├── app.js                  # 핵심 로직
+│   ├── styles.css              # 스타일
+│   └── vendor/pdfjs/           # PDF 텍스트 추출
+├── codex_harness/
+│   ├── .agents/roles/          # 에이전트 역할 정의
+│   ├── .agents/workflows/      # 워크플로 정의
+│   └── scripts/agent-runner.mjs
+├── tests/
+│   └── regression.mjs          # 회귀 테스트
+├── .github/workflows/
+│   └── deploy.yml              # GitHub Pages 자동 배포
+├── INSTALL_GUIDE.md            # Windows 설치 가이드
+├── PROGRESS_2026-07-18.md      # 세션 진행 현황 및 인수인계
+└── CLAUDE.md                   # 하네스 사용 정책
+```
 
-두 하네스를 같은 워킹트리에서 동시에 실행하지 않습니다. 커밋되지 않은 변경이 있는 상태에서 codex_harness의 `implement-feature`/`fix-bug`를 돌리면 두 에이전트가 같은 파일을 동시에 수정해 레이스 컨디션이 생길 수 있습니다.
+---
 
-루트 `AGENTS.md`와 `.agents/`는 codex_harness가 소유합니다(`agent-runner.mjs init --project-root .` 실행 시 생성, 기존 파일은 `--force` 없이는 덮어쓰지 않음). 이 정책에 따라 Claude Code(OMC)의 `deepinit`(계층형 AGENTS.md 생성) 스킬은 이 저장소 루트에서 실행하지 않습니다.
+## 테스트
 
-자세한 적용 규칙은 루트 `CLAUDE.md`에 정리되어 있습니다.
+```sh
+npm test
+```
 
-## 참고 문서
+---
 
-`회사 출근 전 확인사항_YYproject - Claude.pdf` 파일은 더 큰 자동화 프로젝트를 위한 참고 문서입니다.
+## 앞으로 진행할 사항
 
-현재 환경에서는 PDF 본문 추출 도구가 없어 내용을 요구사항으로 확정하지 않았습니다. 추후 본문을 추출하거나 수동 요약한 뒤 자동화 업무 목록과 워크플로 설계에 반영할 예정입니다.
+- [ ] Windows 11 PC에서 Ollama 설치 후 AI 평가 품질 실제 테스트
+- [ ] GitHub Pages 주소 공유 → 사용자 피드백 수집
+- [ ] AI 평가 품질에 따라 외부 API(Claude 등) 전환 여부 결정
+- [ ] reviewPolicy UI 기능 연결
+- [ ] 교사 체크리스트 모드 (AI 없이 상/중/하 직접 선택) 검토
