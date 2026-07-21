@@ -41,11 +41,24 @@ function createElement() {
 
 function loadAppForUnitChecks() {
   const storage = new Map();
+  const elements = new Map();
+  let fetchHandler = () => {
+    throw new Error("Unexpected fetch call");
+  };
+  const getElement = (selector) => {
+    if (!elements.has(selector)) elements.set(selector, createElement());
+    return elements.get(selector);
+  };
   const context = {
     console,
     structuredClone,
     Blob: class Blob {},
     URL,
+    AbortSignal: {
+      timeout() {
+        return {};
+      },
+    },
     FormData: class FormData {
       get() {
         return "";
@@ -55,10 +68,13 @@ function loadAppForUnitChecks() {
     Date,
     document: {
       currentScript: { src: "https://example.test/app/app.js" },
-      querySelector() {
-        return createElement();
+      querySelector(selector) {
+        return getElement(selector);
       },
       createElement,
+    },
+    fetch(...args) {
+      return fetchHandler(...args);
     },
     window: {
       localStorage: {
@@ -82,7 +98,10 @@ globalThis.__auto1Test = {
   FILE_LIMITS,
   get state() { return state; },
   set state(value) { state = value; },
+  els,
   evaluateSubmission,
+  runEvaluation,
+  approveReview,
   normalizeState,
   parseTeacherScore,
   validateOllamaUrl,
@@ -95,6 +114,9 @@ globalThis.__auto1Test = {
     context,
     { filename: "app/app.js" },
   );
+  context.__auto1Test.setFetch = (handler) => {
+    fetchHandler = handler;
+  };
   return context.__auto1Test;
 }
 
@@ -157,6 +179,31 @@ assert.equal(unit.parseTeacherScore("18").valid, true);
 assert.equal(unit.parseTeacherScore("21").valid, false);
 assert.equal(unit.parseTeacherScore("abc").valid, false);
 
+unit.state = {
+  ...unit.state,
+  currentIndex: 0,
+  submissions: [
+    {
+      id: "pending",
+      name: "미평가",
+      text: "제출",
+      status: "pending",
+      scores: {},
+      aiScore: null,
+      teacherScore: null,
+      confidence: null,
+      feedback: "",
+      note: "",
+    },
+  ],
+};
+unit.els.teacherScore.value = "";
+unit.els.feedbackText.value = "";
+unit.els.teacherNote.value = "";
+unit.approveReview();
+assert.equal(unit.state.submissions[0].status, "pending");
+assert.equal(unit.state.submissions[0].teacherScore, null);
+
 const repaired = unit.normalizeState({
   assessment: {
     maxScore: "20",
@@ -186,6 +233,139 @@ assert.equal(repaired.submissions[0].aiScore, null);
 assert.equal(repaired.submissions[0].teacherScore, null);
 assert.equal(repaired.currentIndex, 0);
 assert.deepEqual(repaired.testFeedback, []);
+
+unit.state = structuredClone(unit.defaultState);
+unit.state.submissions = [
+  {
+    id: "1",
+    name: "학생",
+    text: "original answer",
+    status: "pending",
+    scores: {},
+    aiScore: null,
+    teacherScore: null,
+    confidence: null,
+    feedback: "",
+    note: "",
+  },
+];
+unit.els.assessmentTitle.value = unit.state.assessment.title;
+unit.els.assessmentSubject.value = unit.state.assessment.subject;
+unit.els.assessmentMax.value = String(unit.state.assessment.maxScore);
+unit.els.assessmentPrompt.value = unit.state.assessment.prompt;
+unit.els.ollamaUrl.value = "http://localhost:11434";
+unit.els.ollamaModel.value = unit.state.assessment.ollamaModel;
+let resolveFetch;
+let requestedUrl;
+const fetchStarted = new Promise((resolve) => {
+  unit.setFetch(async (url) => {
+    requestedUrl = url;
+    resolve();
+    await new Promise((fetchResolve) => {
+      resolveFetch = fetchResolve;
+    });
+    return {
+      ok: true,
+      async json() {
+        return {
+          response: JSON.stringify({
+            scores: {
+              claim: { score: 5, reason: "명확함" },
+              evidence: { score: 6, reason: "근거 충분" },
+              structure: { score: 5, reason: "구성 적절" },
+              expression: { score: 4, reason: "표현 정확" },
+            },
+            confidence: 88,
+            feedback: "좋은 답안입니다.",
+          }),
+        };
+      },
+    };
+  });
+});
+const evaluation = unit.runEvaluation();
+await Promise.race([
+  fetchStarted,
+  evaluation.then(() => {
+    throw new Error(
+      `Evaluation finished before the mocked Ollama request started: ${unit.els.toast.textContent}; ${unit.state.submissions[0].feedback}`,
+    );
+  }),
+]);
+assert.equal(requestedUrl, "http://localhost:11434/api/generate");
+unit.state.submissions[0].text = "edited while evaluation is running";
+resolveFetch();
+await evaluation;
+assert.equal(unit.state.submissions[0].text, "edited while evaluation is running");
+assert.equal(unit.state.submissions[0].aiScore, null);
+assert.equal(unit.state.submissions[0].status, "pending");
+
+unit.state = structuredClone(unit.defaultState);
+unit.state.submissions = [
+  {
+    id: "teacher-edit",
+    name: "학생",
+    text: "answer under review",
+    status: "pending",
+    scores: {},
+    aiScore: null,
+    teacherScore: null,
+    confidence: null,
+    feedback: "",
+    note: "",
+  },
+];
+unit.els.assessmentTitle.value = unit.state.assessment.title;
+unit.els.assessmentSubject.value = unit.state.assessment.subject;
+unit.els.assessmentMax.value = String(unit.state.assessment.maxScore);
+unit.els.assessmentPrompt.value = unit.state.assessment.prompt;
+unit.els.ollamaUrl.value = "http://localhost:11434";
+unit.els.ollamaModel.value = unit.state.assessment.ollamaModel;
+let resolveTeacherEditFetch;
+const teacherEditFetchStarted = new Promise((resolve) => {
+  unit.setFetch(async () => {
+    resolve();
+    await new Promise((fetchResolve) => {
+      resolveTeacherEditFetch = fetchResolve;
+    });
+    return {
+      ok: true,
+      async json() {
+        return {
+          response: JSON.stringify({
+            scores: {
+              claim: { score: 5, reason: "명확함" },
+              evidence: { score: 6, reason: "근거 충분" },
+              structure: { score: 5, reason: "구성 적절" },
+              expression: { score: 4, reason: "표현 정확" },
+            },
+            confidence: 88,
+            feedback: "AI 피드백",
+          }),
+        };
+      },
+    };
+  });
+});
+const teacherEditEvaluation = unit.runEvaluation();
+await Promise.race([
+  teacherEditFetchStarted,
+  teacherEditEvaluation.then(() => {
+    throw new Error(
+      `Evaluation finished before the mocked teacher-edit request started: ${unit.els.toast.textContent}`,
+    );
+  }),
+]);
+unit.state.submissions[0].name = "교사가 수정한 이름";
+unit.state.submissions[0].teacherScore = 18;
+unit.state.submissions[0].feedback = "교사 피드백";
+unit.state.submissions[0].note = "교사 메모";
+resolveTeacherEditFetch();
+await teacherEditEvaluation;
+assert.equal(unit.state.submissions[0].name, "교사가 수정한 이름");
+assert.equal(unit.state.submissions[0].teacherScore, 18);
+assert.equal(unit.state.submissions[0].feedback, "교사 피드백");
+assert.equal(unit.state.submissions[0].note, "교사 메모");
 
 assert.throws(
   () => unit.validateFileSize({ size: unit.FILE_LIMITS.textBytes + 1 }, false),
