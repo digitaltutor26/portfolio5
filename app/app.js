@@ -412,16 +412,14 @@ async function runEvaluation() {
       try {
         results.push({
           index: target.index,
-          sourceText: target.submission.text,
-          sourceId: target.submission.id,
+          before: target.submission,
           submission: await evaluateSubmission(target.submission, runContext),
         });
       } catch (error) {
         errorCount++;
         results.push({
           index: target.index,
-          sourceText: target.submission.text,
-          sourceId: target.submission.id,
+          before: target.submission,
           submission: {
             ...target.submission,
             status: "pending",
@@ -436,7 +434,17 @@ async function runEvaluation() {
 
     for (const result of results) {
       const current = state.submissions[result.index];
-      if (!current || current.id !== result.sourceId || current.text !== result.sourceText) {
+      const before = result.before;
+      const changedDuringEvaluation =
+        !current ||
+        current.id !== before.id ||
+        current.text !== before.text ||
+        current.name !== before.name ||
+        current.teacherScore !== before.teacherScore ||
+        current.feedback !== before.feedback ||
+        current.note !== before.note ||
+        current.status !== before.status;
+      if (changedDuringEvaluation) {
         skippedChangedCount++;
         continue;
       }
