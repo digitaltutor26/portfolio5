@@ -74,6 +74,27 @@
               </div>
               <span class="pill">초안</span>
             </div>
+            <div class="template-controls">
+              <div class="row">
+                <select id="templateSelect" aria-label="저장된 템플릿">
+                  <option value="">템플릿 불러오기...</option>
+                </select>
+                <button class="ghost-button compact" id="loadTemplate" type="button">불러오기</button>
+                <button class="ghost-button compact danger" id="deleteTemplate" type="button">삭제</button>
+              </div>
+              <div class="row">
+                <input id="templateName" placeholder="템플릿 이름 (예: 3학년 과학 실험보고서)" aria-label="새 템플릿 이름" />
+                <button class="ghost-button compact" id="saveTemplate" type="button">현재 설정을 템플릿으로 저장</button>
+              </div>
+              <div class="row">
+                <button class="ghost-button compact" id="newTemplate" type="button">새 템플릿 만들기(빈 칸)</button>
+                <button class="ghost-button compact" id="exportTemplates" type="button">내보내기</button>
+                <label class="ghost-button compact file-upload-label">
+                  가져오기
+                  <input type="file" accept=".json" id="importTemplates" aria-label="템플릿 JSON 파일 가져오기" />
+                </label>
+              </div>
+            </div>
             <div class="form-grid">
               <label>
                 과제명

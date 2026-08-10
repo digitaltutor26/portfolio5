@@ -350,6 +350,25 @@ textarea {
   padding: 0 16px 16px;
 }
 
+.template-controls {
+  display: grid;
+  gap: 8px;
+  padding: 0 16px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.template-controls .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-controls select,
+.template-controls input {
+  flex: 1;
+  min-width: 0;
+}
+
 .ollama-settings {
   padding: 0 16px 16px;
   display: grid;
@@ -770,6 +789,10 @@ th {
   .metric-strip,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .template-controls .row {
+    flex-direction: column;
   }
 
   .topbar-actions,

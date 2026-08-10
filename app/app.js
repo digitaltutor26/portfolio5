@@ -81,6 +81,7 @@ const defaultState = {
   ],
   currentIndex: 0,
   testFeedback: [],
+  templates: [],
 };
 
 let state = loadState();
@@ -127,6 +128,8 @@ const els = {
   feedbackForm: document.querySelector("#feedbackForm"),
   feedbackList: document.querySelector("#feedbackList"),
   toast: document.querySelector("#toast"),
+  templateSelect: document.querySelector("#templateSelect"),
+  templateName: document.querySelector("#templateName"),
 };
 
 document.querySelector("#runEvaluation").addEventListener("click", runEvaluation);
@@ -140,6 +143,12 @@ document.querySelector("#approveReview").addEventListener("click", approveReview
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
 document.querySelector("#exportFeedback").addEventListener("click", exportFeedback);
 els.feedbackForm.addEventListener("submit", saveTestFeedback);
+document.querySelector("#saveTemplate").addEventListener("click", saveTemplate);
+document.querySelector("#loadTemplate").addEventListener("click", loadTemplate);
+document.querySelector("#deleteTemplate").addEventListener("click", deleteTemplate);
+document.querySelector("#newTemplate").addEventListener("click", startBlankTemplate);
+document.querySelector("#exportTemplates").addEventListener("click", exportTemplates);
+document.querySelector("#importTemplates").addEventListener("change", handleTemplateImport);
 
 [
   els.assessmentTitle,
@@ -194,6 +203,7 @@ function normalizeState(saved) {
     rubric: rubric.map(normalizeCriterion),
     submissions: submissions.map(normalizeSubmission),
     testFeedback: Array.isArray(saved.testFeedback) ? saved.testFeedback : fallback.testFeedback,
+    templates: Array.isArray(saved.templates) ? saved.templates.map(normalizeTemplate) : fallback.templates,
   };
 
   normalized.submissions.forEach((submission) => {
@@ -236,6 +246,26 @@ function normalizeCriterion(criterion, index) {
         : criterion?.hints
           ? `핵심 단서: ${criterion.hints}`
           : fallback.description,
+  };
+}
+
+function normalizeTemplate(template, index) {
+  const templateAssessment = template?.assessment && typeof template.assessment === "object" ? template.assessment : {};
+  const maxScore = Number(templateAssessment.maxScore);
+  return {
+    id: typeof template?.id === "string" && template.id.trim() ? template.id : `template-${Date.now()}-${index}`,
+    name: typeof template?.name === "string" && template.name.trim() ? template.name : `템플릿 ${index + 1}`,
+    savedAt: typeof template?.savedAt === "string" ? template.savedAt : new Date().toISOString(),
+    assessment: {
+      title: typeof templateAssessment.title === "string" ? templateAssessment.title : defaultState.assessment.title,
+      subject: typeof templateAssessment.subject === "string" ? templateAssessment.subject : defaultState.assessment.subject,
+      maxScore: Number.isFinite(maxScore) && maxScore > 0 ? maxScore : defaultState.assessment.maxScore,
+      prompt: typeof templateAssessment.prompt === "string" ? templateAssessment.prompt : defaultState.assessment.prompt,
+    },
+    rubric:
+      Array.isArray(template?.rubric) && template.rubric.length > 0
+        ? template.rubric.map(normalizeCriterion)
+        : structuredClone(defaultState.rubric),
   };
 }
 
@@ -359,10 +389,146 @@ function addSubmission() {
   render();
 }
 
+function saveTemplate() {
+  const name = els.templateName.value.trim();
+  if (!name) {
+    showToast("템플릿 이름을 입력하세요.");
+    return;
+  }
+
+  // Ollama 서버 주소/모델명은 기기별 연결 설정이라 템플릿에 포함하지 않는다.
+  const template = {
+    id: `template-${Date.now()}`,
+    name,
+    savedAt: new Date().toISOString(),
+    assessment: {
+      title: state.assessment.title,
+      subject: state.assessment.subject,
+      maxScore: state.assessment.maxScore,
+      prompt: state.assessment.prompt,
+    },
+    rubric: structuredClone(state.rubric),
+  };
+
+  state.templates = [template, ...(state.templates || [])];
+  els.templateName.value = "";
+  saveState();
+  renderTemplates();
+  showToast(`"${name}" 템플릿을 저장했습니다.`);
+}
+
+function loadTemplate() {
+  const id = els.templateSelect.value;
+  if (!id) {
+    showToast("불러올 템플릿을 선택하세요.");
+    return;
+  }
+  const template = (state.templates || []).find((item) => item.id === id);
+  if (!template) return;
+
+  state.assessment.title = template.assessment.title;
+  state.assessment.subject = template.assessment.subject;
+  state.assessment.maxScore = template.assessment.maxScore;
+  state.assessment.prompt = template.assessment.prompt;
+  state.rubric = structuredClone(template.rubric);
+
+  saveState();
+  render();
+  showToast(`"${template.name}" 템플릿을 불러왔습니다.`);
+}
+
+function deleteTemplate() {
+  const id = els.templateSelect.value;
+  if (!id) {
+    showToast("삭제할 템플릿을 선택하세요.");
+    return;
+  }
+  state.templates = (state.templates || []).filter((item) => item.id !== id);
+  saveState();
+  renderTemplates();
+  showToast("템플릿을 삭제했습니다.");
+}
+
+function startBlankTemplate() {
+  state.assessment.title = "";
+  state.assessment.subject = "";
+  state.assessment.prompt = "";
+  state.rubric = [
+    {
+      id: `criterion-${Date.now()}`,
+      name: "",
+      points: 5,
+      description: "상( 점): \n중( 점): \n하( 점): ",
+    },
+  ];
+  saveState();
+  render();
+  showToast("빈 템플릿을 시작합니다. 과제명과 루브릭을 직접 입력한 뒤 템플릿으로 저장하세요.");
+}
+
+function exportTemplates() {
+  const templates = state.templates || [];
+  if (templates.length === 0) {
+    showToast("내보낼 템플릿이 없습니다.");
+    return;
+  }
+  const blob = new Blob([JSON.stringify(templates, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "auto1-templates.json";
+  link.click();
+  URL.revokeObjectURL(url);
+  showToast(`템플릿 ${templates.length}개를 내보냈습니다.`);
+}
+
+async function handleTemplateImport(event) {
+  const fileInput = event.target;
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  try {
+    const parsed = JSON.parse(await file.text());
+    const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.templates) ? parsed.templates : null;
+    if (!list) throw new Error("템플릿 배열을 찾을 수 없습니다.");
+
+    const imported = list.map((template, index) =>
+      normalizeTemplate({ ...template, id: `template-import-${Date.now()}-${index}` }, index),
+    );
+    state.templates = [...imported, ...(state.templates || [])];
+    saveState();
+    renderTemplates();
+    showToast(`템플릿 ${imported.length}개를 가져왔습니다.`);
+  } catch (error) {
+    showToast(`템플릿 파일을 읽는 중 오류가 발생했습니다: ${error.message}`);
+  } finally {
+    fileInput.value = "";
+  }
+}
+
+function renderTemplates() {
+  const templates = state.templates || [];
+  const previousSelection = els.templateSelect.value;
+  els.templateSelect.innerHTML = '<option value="">템플릿 불러오기...</option>';
+  templates.forEach((template) => {
+    const option = document.createElement("option");
+    option.value = template.id;
+    option.textContent = template.name;
+    els.templateSelect.appendChild(option);
+  });
+  if (templates.some((template) => template.id === previousSelection)) {
+    els.templateSelect.value = previousSelection;
+  }
+}
+
 function resetDemo() {
   const existingFeedback = state.testFeedback || [];
+  const existingTemplates = state.templates || [];
   state = structuredClone(defaultState);
   state.testFeedback = existingFeedback;
+  state.templates = existingTemplates;
   saveState();
   render();
   showToast("샘플 데이터가 복원되었습니다.");
@@ -409,6 +575,7 @@ async function runEvaluation() {
 
   try {
     for (const target of evaluationTargets) {
+      button.textContent = `AI 평가 중... (${results.length + 1}/${evaluationTargets.length})`;
       try {
         results.push({
           index: target.index,
@@ -717,6 +884,7 @@ function render() {
   renderMetrics();
   renderReport();
   renderFeedback();
+  renderTemplates();
 }
 
 function renderAssessment() {
