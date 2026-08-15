@@ -381,6 +381,18 @@ textarea {
   gap: 8px;
 }
 
+.plan-extract {
+  padding: 0 16px 16px;
+  margin-bottom: 4px;
+  display: grid;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-extract textarea {
+  min-height: 120px;
+}
+
 .rubric-list,
 .submission-list {
   display: grid;

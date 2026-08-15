@@ -149,6 +149,8 @@ document.querySelector("#deleteTemplate").addEventListener("click", deleteTempla
 document.querySelector("#newTemplate").addEventListener("click", startBlankTemplate);
 document.querySelector("#exportTemplates").addEventListener("click", exportTemplates);
 document.querySelector("#importTemplates").addEventListener("change", handleTemplateImport);
+document.querySelector("#extractRubric").addEventListener("click", extractRubricFromPlan);
+document.querySelector("#planFileInput").addEventListener("change", handlePlanFileUpload);
 
 [
   els.assessmentTitle,
@@ -944,6 +946,111 @@ function updateCriterion(event) {
   saveState();
 }
 
+async function extractRubricFromPlan() {
+  const planTextEl = document.querySelector("#planText");
+  const text = planTextEl.value.trim();
+  if (!text) {
+    showToast("평가계획서 내용을 붙여넣으세요.");
+    return;
+  }
+
+  const ollamaValidation = validateOllamaUrl(state.assessment.ollamaUrl);
+  if (!ollamaValidation.valid) {
+    showToast(ollamaValidation.message);
+    return;
+  }
+
+  const button = document.querySelector("#extractRubric");
+  button.disabled = true;
+  button.textContent = "추출 중...";
+
+  try {
+    const prompt = buildPlanExtractionPrompt(text);
+    const model = state.assessment.ollamaModel || DEFAULT_OLLAMA_MODEL;
+
+    let response;
+    try {
+      response = await fetch(`${ollamaValidation.url}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, prompt, format: "json", stream: false }),
+        signal: AbortSignal.timeout(120_000),
+      });
+    } catch (error) {
+      throw new Error(
+        error.name === "TimeoutError"
+          ? "응답 시간 초과(2분). 더 작은 모델을 사용하거나 PC 성능을 확인하세요."
+          : `Ollama 서버에 연결할 수 없습니다(${ollamaValidation.url}). Ollama가 실행 중인지 확인하세요.`,
+      );
+    }
+
+    if (!response.ok) throw new Error(`Ollama 서버 오류 (HTTP ${response.status})`);
+
+    const data = await response.json();
+    const extracted = parsePlanExtraction(data.response);
+    if (extracted.length === 0) throw new Error("문서에서 채점 기준을 찾지 못했습니다. 내용을 더 포함해서 다시 시도해 보세요.");
+
+    state.rubric = extracted;
+    saveState();
+    render();
+    showToast(`${extracted.length}개 기준을 추출했습니다. 내용을 검토한 뒤 사용하세요.`);
+  } catch (error) {
+    showToast(`루브릭 추출 실패: ${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = "루브릭 추출";
+  }
+}
+
+function buildPlanExtractionPrompt(text) {
+  return `당신은 학교 수행평가 계획서를 분석하는 보조 도구입니다.
+
+아래는 교사가 작성한 평가계획서(또는 그 일부)입니다. 이 문서에서 실제 채점에 사용할 평가 기준(루브릭)을 찾아 정리하세요.
+
+[평가계획서]
+${text}
+
+각 평가 기준마다 다음을 추출하세요:
+- name: 기준명
+- points: 배점(정수)
+- description: 상/중/하 등 수준별 채점 기준 설명을 모두 포함. 한 줄 요약으로 뭉치지 말고, 반드시 "상(N점): 설명\\n중(M점): 설명\\n하(K점): 설명" 형식으로 문서에 적힌 수준별 설명을 그대로 옮기세요.
+
+예시 — 문서에 아래처럼 적혀 있다면:
+"2. 근거와 자료 (6점): 상(6점) 근거 2개 이상 제시, 중(4점) 근거 1개, 하(2점) 근거 없음"
+
+다음과 같이 추출해야 합니다:
+{"name": "근거와 자료", "points": 6, "description": "상(6점): 근거 2개 이상 제시\\n중(4점): 근거 1개\\n하(2점): 근거 없음"}
+
+반드시 아래 JSON 형식으로만 응답하세요:
+{
+  "criteria": [
+    {"name": "...", "points": 숫자, "description": "..."}
+  ]
+}
+
+문서에 없는 내용을 지어내지 말고, 실제로 문서에 적힌 기준·배점·수준별 설명만 추출하세요. 수준 구분이 문서에 없는 기준은 있는 그대로 한 줄로 작성하세요. 채점 기준을 찾을 수 없으면 "criteria"를 빈 배열로 응답하세요.`;
+}
+
+function parsePlanExtraction(responseText) {
+  let result;
+  try {
+    const cleaned = responseText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    result = JSON.parse(cleaned);
+  } catch {
+    throw new Error("AI 응답을 해석할 수 없습니다. 다시 시도해 주세요.");
+  }
+
+  const list = Array.isArray(result?.criteria) ? result.criteria : [];
+  return list
+    .filter((item) => item && typeof item.name === "string" && item.name.trim())
+    .map((item, index) =>
+      normalizeCriterion(
+        { id: `plan-${Date.now()}-${index}`, name: item.name, points: item.points, description: item.description },
+        index,
+      ),
+    );
+}
+
 function renderSubmissions() {
   els.submissionList.innerHTML = "";
   state.submissions.forEach((submission, index) => {
@@ -1141,6 +1248,47 @@ async function handleFileUpload(event) {
         : `"${file.name}" 텍스트를 화면에 불러왔지만 저장 공간이 부족합니다.`,
       saved ? "success" : "error",
     );
+  } catch (error) {
+    setStatus(`파일을 읽는 중 오류가 발생했습니다: ${error.message}`, "error");
+  } finally {
+    fileInput.value = "";
+  }
+}
+
+async function handlePlanFileUpload(event) {
+  const fileInput = event.target;
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  const statusEl = document.querySelector("#planFileStatus");
+  const setStatus = (message, tone) => {
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.className = `file-status ${tone}`;
+  };
+
+  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  const isText = file.type.startsWith("text/") || file.name.toLowerCase().endsWith(".txt");
+
+  if (!isPdf && !isText) {
+    setStatus("지원하지 않는 파일 형식입니다. .txt 또는 .pdf 파일만 가능합니다 (HWP는 PDF로 저장 후 업로드하세요).", "error");
+    fileInput.value = "";
+    return;
+  }
+
+  setStatus(`"${file.name}" 처리 중...`, "busy");
+
+  try {
+    validateFileSize(file, isPdf);
+    const text = isPdf ? await extractPdfText(file) : await file.text();
+
+    if (!text.trim()) {
+      setStatus(`"${file.name}"에서 텍스트를 찾지 못했습니다. 스캔본/이미지 PDF는 지원하지 않습니다.`, "error");
+      return;
+    }
+
+    document.querySelector("#planText").value = truncateText(text);
+    setStatus(`"${file.name}"에서 텍스트를 불러왔습니다. 내용을 확인한 뒤 "루브릭 추출"을 누르세요.`, "success");
   } catch (error) {
     setStatus(`파일을 읽는 중 오류가 발생했습니다: ${error.message}`, "error");
   } finally {

@@ -147,6 +147,23 @@
               </div>
               <button class="icon-button" id="addCriterion" type="button" aria-label="기준 추가" title="기준 추가">+</button>
             </div>
+            <div class="plan-extract">
+              <label>
+                평가계획서에서 루브릭 추출
+                <textarea id="planText" rows="6" placeholder="채점 기준 부분을 직접 붙여넣거나, 아래에서 파일을 불러오세요 (HWP는 미지원 — 한글에서 'PDF로 저장' 후 업로드)"></textarea>
+              </label>
+              <div class="file-upload-row">
+                <label class="ghost-button compact file-upload-label">
+                  파일로 불러오기 (.txt/.pdf)
+                  <input type="file" accept=".txt,.pdf" id="planFileInput" />
+                </label>
+                <span class="file-status" id="planFileStatus" aria-live="polite"></span>
+              </div>
+              <div class="button-row">
+                <button class="ghost-button compact" id="extractRubric" type="button">루브릭 추출</button>
+              </div>
+              <span class="field-hint">추출 결과가 아래 루브릭 목록을 대체합니다. AI가 뽑은 내용이니 반드시 검토한 뒤 사용하세요.</span>
+            </div>
             <div id="rubricList" class="rubric-list"></div>
           </div>
 
