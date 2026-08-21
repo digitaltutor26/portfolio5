@@ -973,7 +973,7 @@ async function extractRubricFromPlan() {
       response = await fetch(`${ollamaValidation.url}/api/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, prompt, format: "json", stream: false }),
+        body: JSON.stringify({ model, prompt, format: "json", stream: false, options: { temperature: 0 } }),
         signal: AbortSignal.timeout(120_000),
       });
     } catch (error) {
@@ -1012,7 +1012,7 @@ ${text}
 
 각 평가 기준마다 다음을 추출하세요:
 - name: 기준명
-- points: 배점(정수)
+- points: 배점(정수). 반드시 해당 기준명 바로 옆이나 같은 항목 안에 적힌 숫자만 사용하세요. 다른 기준의 배점이나 총점을 가져오지 마세요.
 - description: 상/중/하 등 수준별 채점 기준 설명을 모두 포함. 한 줄 요약으로 뭉치지 말고, 반드시 "상(N점): 설명\\n중(M점): 설명\\n하(K점): 설명" 형식으로 문서에 적힌 수준별 설명을 그대로 옮기세요.
 
 예시 — 문서에 아래처럼 적혀 있다면:
@@ -1028,7 +1028,12 @@ ${text}
   ]
 }
 
-문서에 없는 내용을 지어내지 말고, 실제로 문서에 적힌 기준·배점·수준별 설명만 추출하세요. 수준 구분이 문서에 없는 기준은 있는 그대로 한 줄로 작성하세요. 채점 기준을 찾을 수 없으면 "criteria"를 빈 배열로 응답하세요.`;
+지켜야 할 규칙:
+1. 문서에 없는 내용을 지어내지 마세요. 실제로 문서에 적힌 기준·배점·수준별 설명만 추출하세요.
+2. 문서에 있는 평가 기준을 하나도 빠뜨리지 말고, 서로 다른 기준을 하나로 합치지 마세요. 문서에 몇 개의 기준이 있으면 정확히 그 개수만큼 추출하세요.
+3. 배점 숫자를 다른 기준이나 총점과 헷갈리지 마세요. 확신이 없는 숫자는 만들어내지 말고 문서에 적힌 그대로만 사용하세요.
+4. 수준 구분이 문서에 없는 기준은 있는 그대로 한 줄로 작성하세요.
+5. 채점 기준을 찾을 수 없으면 "criteria"를 빈 배열로 응답하세요.`;
 }
 
 function parsePlanExtraction(responseText) {
