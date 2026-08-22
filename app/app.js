@@ -84,7 +84,7 @@ const defaultState = {
   templates: [],
 };
 
-let state = loadState();
+let state;
 
 const DEFAULT_OLLAMA_URL = "http://localhost:11434";
 const DEFAULT_OLLAMA_MODEL = "gemma3:4b";
@@ -131,6 +131,10 @@ const els = {
   templateSelect: document.querySelector("#templateSelect"),
   templateName: document.querySelector("#templateName"),
 };
+
+// FILE_LIMITS 등 뒤에 선언된 상수를 normalizeState()가 참조하므로,
+// 해당 상수들이 모두 초기화된 뒤에 state를 로드해야 한다(TDZ 오류 방지).
+state = loadState();
 
 document.querySelector("#runEvaluation").addEventListener("click", runEvaluation);
 document.querySelector("#resetDemo").addEventListener("click", resetDemo);
