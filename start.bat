@@ -3,6 +3,22 @@ setlocal EnableExtensions
 rem Auto1 launcher for Windows: starts the local web server for app\ and opens the browser.
 rem Needs Python 3 or Node.js. Ollama is only needed for AI scoring.
 
+rem --- auto update: only when this folder is a git clone (not a ZIP download) ---
+if exist "%~dp0.git" (
+  where git >nul 2>&1
+  if errorlevel 1 (
+    echo [WARN] git not found - skipping update check.
+  ) else (
+    echo Checking for updates...
+    git -C "%~dp0." pull --ff-only
+    if errorlevel 1 (
+      echo [WARN] Update failed. Continuing with the current version.
+      echo        ^(offline, or local changes in this folder block the update^)
+    )
+    echo.
+  )
+)
+
 cd /d "%~dp0app" || (
   echo [ERROR] Cannot find the "app" folder next to start.bat.
   echo         Unzip the whole portfolio5 folder and run start.bat from inside it.
